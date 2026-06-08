@@ -328,6 +328,52 @@ const CONFIG_REL_ADMINS_PROP_KEY = 'COSEP_REL_ADMINS';
 const CONFIG_REL_SHEET = 'COSEP_REL_CONFIG';
 const CONFIG_REL_LOG_SHEET = 'COSEP_REL_CONFIG_LOG';
 const CONFIG_REL_SCHEMA_VERSION = '1.0';
+const CONFIG_REL_CACHE_KEY = 'COSEP_REL_CONFIG_CACHE_V1';
+const CONFIG_REL_CACHE_TTL_SECONDS = 21600; // 6 horas
+
+
+function obterCacheConfigRel() {
+  try {
+    const raw = CacheService.getScriptCache().get(CONFIG_REL_CACHE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (erro) {
+    registrarErro('cache-config-rel-get', erro);
+    return null;
+  }
+}
+
+function salvarCacheConfigRel(cfg) {
+  try {
+    CacheService.getScriptCache().put(CONFIG_REL_CACHE_KEY, JSON.stringify(cfg), CONFIG_REL_CACHE_TTL_SECONDS);
+  } catch (erro) {
+    registrarErro('cache-config-rel-put', erro);
+  }
+}
+
+function invalidarCacheConfigRel() {
+  try {
+    CacheService.getScriptCache().remove(CONFIG_REL_CACHE_KEY);
+  } catch (erro) {
+    registrarErro('cache-config-rel-remove', erro);
+  }
+}
+
+function executarComLockConfigRel(origem, callback) {
+  const lock = LockService.getScriptLock();
+  const conseguiuLock = lock.tryLock(30000);
+  if (!conseguiuLock) {
+    throw new Error('Tempo esgotado ao aguardar a fila de gravação. Tente novamente em alguns instantes.');
+  }
+  try {
+    return callback();
+  } catch (erro) {
+    registrarErro(origem || 'lock-config-rel', erro);
+    throw erro;
+  } finally {
+    lock.releaseLock();
+  }
+}
 
 function configPadraoRel() {
   return {
@@ -345,28 +391,41 @@ function configPadraoRel() {
 
 function obterConfigRel() {
   const padrao = configPadraoRel();
+  const cfgCache = obterCacheConfigRel();
+  if (cfgCache) return mesclarConfigRel(padrao, cfgCache);
+
   try {
     const cfgInicial = obterConfigRelDePropertiesOuPadrao(padrao);
     const ssConfig = obterPlanilhaConfiguracaoRel(cfgInicial.planilhaId || padrao.planilhaId);
     let sh = ssConfig.getSheetByName(CONFIG_REL_SHEET);
 
     if (!sh) {
-      sh = ssConfig.insertSheet(CONFIG_REL_SHEET);
-      escreverConfigRelNaAba(sh, cfgInicial, 'Configuração inicial criada automaticamente');
-      espelharConfigRelEmProperties(cfgInicial);
-      return cfgInicial;
+      return executarComLockConfigRel('obter-config-rel-criar-aba', () => {
+        sh = ssConfig.getSheetByName(CONFIG_REL_SHEET);
+        if (!sh) {
+          sh = ssConfig.insertSheet(CONFIG_REL_SHEET);
+          escreverConfigRelNaAba(sh, cfgInicial, 'Configuração inicial criada automaticamente');
+          espelharConfigRelEmPropertiesSemCache(cfgInicial);
+        }
+        const cfgCriada = lerConfigRelDaAba(sh, padrao) || cfgInicial;
+        salvarCacheConfigRel(cfgCriada);
+        return cfgCriada;
+      });
     }
 
     const cfgPlanilha = lerConfigRelDaAba(sh, padrao);
     if (cfgPlanilha) {
-      espelharConfigRelEmProperties(cfgPlanilha);
+      espelharConfigRelEmPropertiesSemCache(cfgPlanilha);
+      salvarCacheConfigRel(cfgPlanilha);
       return cfgPlanilha;
     }
   } catch (erro) {
     registrarErro('obter-config-rel-aba', erro);
   }
 
-  return obterConfigRelDePropertiesOuPadrao(padrao);
+  const cfgFallback = obterConfigRelDePropertiesOuPadrao(padrao);
+  salvarCacheConfigRel(cfgFallback);
+  return cfgFallback;
 }
 
 function obterConfigRelDePropertiesOuPadrao(padrao) {
@@ -508,7 +567,7 @@ function salvarConfigRelNaAba(cfg) {
   espelharConfigRelEmProperties(cfg);
 }
 
-function espelharConfigRelEmProperties(cfg) {
+function espelharConfigRelEmPropertiesSemCache(cfg) {
   try {
     const props = PropertiesService.getScriptProperties();
     props.setProperty(CONFIG_REL_PROP_KEY, JSON.stringify(cfg));
@@ -518,14 +577,22 @@ function espelharConfigRelEmProperties(cfg) {
   }
 }
 
-function removerConfigRelDaAba() {
+function espelharConfigRelEmProperties(cfg) {
+  espelharConfigRelEmPropertiesSemCache(cfg);
+  invalidarCacheConfigRel();
+  salvarCacheConfigRel(cfg);
+}
+
+function removerConfigRelDaAba(cfgRestaurada) {
   const ssConfig = obterPlanilhaConfiguracaoRel(PLANILHAS.relatorios);
-  const sh = obterOuCriarAbaConfigRel(ssConfig, configPadraoRel());
-  escreverConfigRelNaAba(sh, configPadraoRel(), 'Configuração restaurada para o padrão pela tela Administração do relatório');
+  const cfgPadrao = cfgRestaurada || configPadraoRel();
+  const sh = obterOuCriarAbaConfigRel(ssConfig, cfgPadrao);
+  escreverConfigRelNaAba(sh, cfgPadrao, 'Configuração restaurada para o padrão pela tela Administração do relatório');
   try {
     const props = PropertiesService.getScriptProperties();
     props.deleteProperty(CONFIG_REL_PROP_KEY);
     props.deleteProperty(CONFIG_REL_BOOTSTRAP_PROP_KEY);
+    invalidarCacheConfigRel();
   } catch (erro) {
     registrarErro('limpar-config-rel-properties', erro);
   }
@@ -600,32 +667,46 @@ function obterConfigRelCosep() {
 }
 
 function salvarConfigRelCosep(novaConfig) {
-  return executarRota('rpc-configrel-save', () => {
+  return executarRota('rpc-configrel-save', () => executarComLockConfigRel('rpc-configrel-save-lock', () => {
     if (!usuarioPodeEditarRel()) return { success: false, mensagem: 'Você não tem permissão para alterar as configurações.' };
     const merged = mesclarConfigRel(configPadraoRel(), novaConfig || {});
     merged.atualizadoEm = Utilities.formatDate(new Date(), FUSO_HORARIO, "dd/MM/yyyy 'às' HH:mm");
     merged.atualizadoPor = emailUsuarioAtualRel() || 'desconhecido';
     salvarConfigRelNaAba(merged);
-    registrarLogRel(merged.atualizadoPor, 'Configuração do relatório atualizada');
+    registrarLogRelSemLock(merged.atualizadoPor, 'Configuração do relatório atualizada', merged);
     return { success: true, config: merged, mensagem: 'Configurações salvas com sucesso.' };
-  });
+  }));
 }
 
 function restaurarConfigRelCosep() {
-  return executarRota('rpc-configrel-reset', () => {
+  return executarRota('rpc-configrel-reset', () => executarComLockConfigRel('rpc-configrel-reset-lock', () => {
     if (!usuarioPodeEditarRel()) return { success: false, mensagem: 'Você não tem permissão para alterar as configurações.' };
-    removerConfigRelDaAba();
-    registrarLogRel(emailUsuarioAtualRel() || 'desconhecido', 'Configuração do relatório restaurada para o padrão');
-    return { success: true, config: obterConfigRel(), mensagem: 'Configurações restauradas para o padrão.' };
-  });
+    const cfgPadraoAtualizada = configPadraoRel();
+    cfgPadraoAtualizada.atualizadoEm = Utilities.formatDate(new Date(), FUSO_HORARIO, "dd/MM/yyyy 'às' HH:mm");
+    cfgPadraoAtualizada.atualizadoPor = emailUsuarioAtualRel() || 'desconhecido';
+    removerConfigRelDaAba(cfgPadraoAtualizada);
+    salvarCacheConfigRel(cfgPadraoAtualizada);
+    registrarLogRelSemLock(cfgPadraoAtualizada.atualizadoPor, 'Configuração do relatório restaurada para o padrão', cfgPadraoAtualizada);
+    return { success: true, config: cfgPadraoAtualizada, mensagem: 'Configurações restauradas para o padrão.' };
+  }));
 }
 
 function registrarLogRel(usuario, acao) {
+  return executarComLockConfigRel('config-rel-log-lock', () => registrarLogRelSemLock(usuario, acao, obterConfigRel()));
+}
+
+function registrarLogRelSemLock(usuario, acao, cfg) {
   try {
-    const ss = abrirPlanilhaRelatorio(obterConfigRel());
+    const ss = abrirPlanilhaRelatorio(cfg || obterConfigRel());
     let sh = ss.getSheetByName(CONFIG_REL_LOG_SHEET);
-    if (!sh) { sh = ss.insertSheet(CONFIG_REL_LOG_SHEET); sh.appendRow(['Data/Hora', 'Usuário', 'Ação']); }
-    sh.appendRow([Utilities.formatDate(new Date(), FUSO_HORARIO, 'dd/MM/yyyy HH:mm:ss'), usuario || '', acao || '']);
+    if (!sh) {
+      sh = ss.insertSheet(CONFIG_REL_LOG_SHEET);
+      sh.getRange(1, 1, 1, 3).setValues([['Data/Hora', 'Usuário', 'Ação']]);
+      sh.setFrozenRows(1);
+      sh.getRange('A1:C1').setFontWeight('bold').setBackground('#0f766e').setFontColor('#ffffff');
+    }
+    const row = [Utilities.formatDate(new Date(), FUSO_HORARIO, 'dd/MM/yyyy HH:mm:ss'), usuario || '', acao || ''];
+    sh.getRange(sh.getLastRow() + 1, 1, 1, row.length).setValues([row]);
   } catch (erro) { registrarErro('config-rel-log', erro); }
 }
 

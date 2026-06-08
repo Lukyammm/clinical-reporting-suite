@@ -446,7 +446,51 @@
       margin-top: 22px;
     }
     .spinner { width: 22px; height: 22px; border: 3px solid #dce8e6; border-top-color: var(--brand); border-radius: 50%; animation: spin .75s linear infinite; }
+    .btn .spinner { width: 16px; height: 16px; border-width: 2px; border-color: rgba(255,255,255,.38); border-top-color: #fff; }
+    .btn-secondary .spinner { border-color: rgba(15,118,110,.18); border-top-color: var(--brand); }
+    .btn[disabled] { cursor: wait; opacity: .72; transform: none; box-shadow: none; }
     @keyframes spin { to { transform: rotate(360deg); } }
+
+    .confirm-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 10000;
+      display: grid;
+      place-items: center;
+      padding: 22px;
+      background: rgba(8, 20, 24, .46);
+      backdrop-filter: blur(12px);
+      opacity: 0;
+      transition: opacity .22s ease;
+    }
+    .confirm-overlay.open { opacity: 1; }
+    .confirm-dialog {
+      width: min(470px, 100%);
+      border: 1px solid rgba(207, 223, 220, .78);
+      border-radius: 28px;
+      background: rgba(255,255,255,.94);
+      box-shadow: 0 28px 90px rgba(5, 26, 31, .28);
+      overflow: hidden;
+      transform: translateY(10px) scale(.98);
+      transition: transform .22s ease;
+    }
+    .confirm-overlay.open .confirm-dialog { transform: translateY(0) scale(1); }
+    .confirm-body { padding: 26px; }
+    .confirm-icon {
+      width: 46px;
+      height: 46px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 16px;
+      background: linear-gradient(135deg, rgba(245,158,11,.15), rgba(15,118,110,.12));
+      color: var(--warning);
+      margin-bottom: 14px;
+    }
+    .confirm-dialog h3 { margin: 0; color: var(--text); font-size: 22px; line-height: 1.15; letter-spacing: -.035em; font-weight: 900; }
+    .confirm-dialog p { margin: 9px 0 0; color: var(--muted); font-size: 14px; line-height: 1.6; font-weight: 650; }
+    .confirm-actions { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 26px 24px; }
+    html[data-theme="dark"] .confirm-dialog { background: rgba(16,29,34,.96); border-color: rgba(148,180,190,.2); }
 
     .preview-card { margin-top: 22px; padding: clamp(14px, 2vw, 22px); }
     .report-tools { justify-content: flex-end; margin-bottom: 14px; }
@@ -919,7 +963,8 @@
           role: 'tabpanel'
         }, h('textarea', { id: tab.textareaId, 'aria-label': tab.aria })))
       );
-      ReactDOM.render(app, root);
+      if (!root.__cosepReactRoot) root.__cosepReactRoot = ReactDOM.createRoot(root);
+      root.__cosepReactRoot.render(app);
     }
 
     renderTextEditorReact();
@@ -1016,6 +1061,39 @@
     }
 
     function toast(message, tipo = 'info', titulo = '') { mostrarToast(message, tipo, titulo); }
+    function confirmarModerno({ titulo, mensagem, textoConfirmar = 'Confirmar', textoCancelar = 'Cancelar', tipo = 'warning' } = {}) {
+      return new Promise(resolve => {
+        const overlay = document.createElement('div');
+        overlay.className = 'confirm-overlay';
+        overlay.setAttribute('role', 'presentation');
+        overlay.innerHTML = `
+          <section class="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-message">
+            <div class="confirm-body">
+              <span class="confirm-icon" aria-hidden="true"><i class="fa-solid ${tipo === 'danger' ? 'fa-triangle-exclamation' : 'fa-circle-question'}"></i></span>
+              <h3 id="confirm-title">${escapeHtml(titulo || 'Confirmação necessária')}</h3>
+              <p id="confirm-message">${escapeHtml(mensagem || 'Deseja continuar com esta ação?')}</p>
+            </div>
+            <div class="confirm-actions">
+              <button type="button" class="btn btn-secondary" data-confirm="cancel">${escapeHtml(textoCancelar)}</button>
+              <button type="button" class="btn btn-primary" data-confirm="ok">${escapeHtml(textoConfirmar)}</button>
+            </div>
+          </section>`;
+        const finalizar = resposta => {
+          overlay.classList.remove('open');
+          window.setTimeout(() => overlay.remove(), 220);
+          resolve(resposta);
+        };
+        overlay.addEventListener('click', ev => { if (ev.target === overlay) finalizar(false); });
+        overlay.querySelector('[data-confirm="cancel"]').addEventListener('click', () => finalizar(false));
+        overlay.querySelector('[data-confirm="ok"]').addEventListener('click', () => finalizar(true));
+        overlay.addEventListener('keydown', ev => { if (ev.key === 'Escape') finalizar(false); });
+        document.body.appendChild(overlay);
+        window.requestAnimationFrame(() => overlay.classList.add('open'));
+        const ok = overlay.querySelector('[data-confirm="ok"]');
+        if (ok) ok.focus();
+      });
+    }
+
 
     function validarPayload(payload) {
       if (!payload || payload.success === false) {
@@ -1027,7 +1105,10 @@
     function fetchViaGoogleScript(params = {}) {
       return new Promise((resolve, reject) => {
         if (!(window.google && google.script && google.script.run)) return reject(new Error('google.script.run indisponível.'));
-        google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).obterPayloadRelatorios(params);
+        const runner = google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(reject);
+        runner.obterPayloadRelatorios(params);
       });
     }
 
@@ -1526,7 +1607,9 @@
     function arelFetch(metodo, arg) {
       return new Promise((resolve, reject) => {
         if (window.google && google.script && google.script.run) {
-          const r = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
+          const r = google.script.run
+            .withSuccessHandler(resolve)
+            .withFailureHandler(reject);
           if (metodo === 'get') r.obterConfigRelCosep();
           else if (metodo === 'save') r.salvarConfigRelCosep(arg);
           else if (metodo === 'reset') r.restaurarConfigRelCosep();
@@ -1608,7 +1691,7 @@
         if (!arelPodeEditar) return;
         const btn = document.getElementById('arel-salvar');
         const orig = btn ? btn.innerHTML : '';
-        if (btn) { btn.disabled = true; btn.innerHTML = 'Salvando...'; }
+        if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner" aria-hidden="true"></span> Salvando...'; }
         try {
           const resp = await arelFetch('save', coletarConfigRel());
           if (resp && resp.success) { if (resp.config) renderConfigRel(resp.config); toast(resp.mensagem || 'Configurações salvas.', 'success', 'Administração'); }
@@ -1618,14 +1701,23 @@
       });
       if (btnReset) btnReset.addEventListener('click', async () => {
         if (!arelPodeEditar) return;
-        if (!window.confirm('Restaurar todas as configurações do relatório para o padrão?')) return;
+        const confirmado = await confirmarModerno({
+          titulo: 'Restaurar configuração padrão?',
+          mensagem: 'Esta ação substitui meta, termos e nomes dos indicadores pelos valores padrão do Relatório Analítico COSEP.',
+          textoConfirmar: 'Restaurar padrão',
+          textoCancelar: 'Manter configuração',
+          tipo: 'danger'
+        });
+        if (!confirmado) { toast('Restauração cancelada. Nenhuma alteração foi feita.', 'info', 'Administração'); return; }
+        const origReset = btnReset.innerHTML;
         btnReset.disabled = true;
+        btnReset.innerHTML = '<span class="spinner" aria-hidden="true"></span> Restaurando...';
         try {
           const resp = await arelFetch('reset');
           if (resp && resp.success) { if (resp.config) renderConfigRel(resp.config); toast(resp.mensagem || 'Configurações restauradas.', 'success', 'Administração'); }
           else toast((resp && resp.mensagem) || 'Não foi possível restaurar.', 'error', 'Administração');
         } catch (e) { toast(String((e && e.message) || e), 'error', 'Administração'); }
-        finally { btnReset.disabled = false; }
+        finally { btnReset.disabled = false; btnReset.innerHTML = origReset; }
       });
     })();
 
