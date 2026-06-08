@@ -2,6 +2,8 @@
 
 Web App em Google Apps Script para geração do Relatório Analítico COSEP com dados em Google Sheets.
 
+A interface atual usa um layout de dashboard executivo minimalista: filtros compactos, KPIs no topo, relatório A4 para PDF e tela de Administração operacional para configurar a base sem alterar código.
+
 ## Estrutura da planilha
 
 A planilha do relatório deve conter, no mínimo:
@@ -11,7 +13,21 @@ A planilha do relatório deve conter, no mínimo:
 - `COSEP_REL_CONFIG`: aba criada automaticamente pelo app para guardar configurações editáveis do relatório.
 - `COSEP_REL_CONFIG_LOG`: aba criada automaticamente para histórico de alterações administrativas.
 
-## Aba de configuração
+## Filtros disponíveis
+
+O relatório CRP suporta filtros por:
+
+- ano;
+- mês;
+- setor/unidade;
+- eixo;
+- categoria;
+- satisfação;
+- status da avaliação.
+
+A comissão `CRO` permanece visível como recurso futuro, mas desativada na interface.
+
+## Administração do relatório
 
 A aba `COSEP_REL_CONFIG` armazena:
 
@@ -23,3 +39,24 @@ A aba `COSEP_REL_CONFIG` armazena:
 - dados da última atualização.
 
 A edição recomendada é pela tela **Administração do relatório**, mas a aba existe na própria planilha para auditoria, manutenção e portabilidade.
+
+Use **Recarregar da planilha** no Admin quando alguém editar `COSEP_REL_CONFIG` diretamente. Esse fluxo chama `api=configrel&refresh=1`, invalida o cache e força uma nova leitura da aba.
+
+## Publicação no Apps Script
+
+Arquivos principais:
+
+- `Code.gs`: backend Apps Script, rotas JSON, leitura da planilha, cache e processamento do relatório.
+- `index.html`: interface do Web App e exportação PDF.
+- `appsscript.json`: manifesto mínimo com runtime V8 e fuso `America/Fortaleza`.
+
+Para publicar manualmente, copie os arquivos para o projeto Apps Script vinculado ao Web App e faça um novo deploy.
+
+Se usar `clasp`, configure o `.clasp.json` local apontando para o Script ID do projeto e execute:
+
+```bash
+clasp push
+clasp deploy
+```
+
+Não versionar `.clasp.json` se ele contiver identificadores de ambiente que não devem ser compartilhados.
