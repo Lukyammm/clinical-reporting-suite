@@ -771,7 +771,15 @@ function obterLinhasRelatorio(ss, comissao, cfg) {
     return vazio;
   }
 
-  const values = sh.getDataRange().getValues();
+  // Evita getDataRange(): em planilhas com milhares de linhas formatadas,
+  // getDataRange() pode varrer colunas/linhas vazias e deixar o Web App preso
+  // no carregamento inicial. O relatório oficial usa A:AQ, então lemos somente
+  // as colunas necessárias e apenas até a última linha realmente existente.
+  const ultimaLinha = Math.max(sh.getLastRow(), 1);
+  const totalColunas = comissaoNormalizada === 'CRP'
+    ? RELATORIO_CRP_COLUNAS.resultado + 1
+    : Math.max(sh.getLastColumn(), 1);
+  const values = sh.getRange(1, 1, ultimaLinha, totalColunas).getValues();
   const headers = values.length ? values[0].map(item => String(item || '').trim()) : [];
   const base = {
     abaEncontrada: sh.getName(),

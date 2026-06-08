@@ -1158,6 +1158,14 @@
       return payload;
     }
 
+    function withTimeout(promise, ms, mensagem) {
+      let timerId;
+      const timeout = new Promise((_, reject) => {
+        timerId = window.setTimeout(() => reject(new Error(mensagem)), ms);
+      });
+      return Promise.race([promise, timeout]).finally(() => window.clearTimeout(timerId));
+    }
+
     function fetchViaGoogleScript(params = {}) {
       return new Promise((resolve, reject) => {
         if (!(window.google && google.script && google.script.run)) return reject(new Error('google.script.run indisponível.'));
@@ -1182,9 +1190,11 @@
     }
 
     async function fetchPayload(params = {}) {
-      const payload = window.google && google.script && google.script.run
-        ? await fetchViaGoogleScript(params)
-        : await fetchViaHttp(params);
+      const timeoutMsg = 'A planilha demorou demais para responder. Recarregue a página; se persistir, confirme permissões da planilha, nome da aba e volume de linhas.';
+      const usandoGoogleScript = Boolean(window.google && google.script && google.script.run);
+      const payload = usandoGoogleScript
+        ? await withTimeout(fetchViaGoogleScript(params), 45000, timeoutMsg)
+        : await withTimeout(fetchViaHttp(params), 45000, timeoutMsg);
       return validarPayload(payload);
     }
 
@@ -1477,6 +1487,7 @@
     }
 
     async function gerarRelatorio(recriarTexto = false, botao = null) {
+      setLoading('', false);
       return executarComBarreiraAcao({
         botao,
         rotulo: botao && botao.id === 'btn-aplicar-filtros' ? 'Aplicando...' : 'Gerando...',
@@ -1491,7 +1502,7 @@
           toast('Relatório gerado com sucesso e pronto para impressão.', 'success', 'Relatório pronto');
         } catch (error) {
           console.error(error);
-          setLoading('Não foi possível gerar o relatório. Confira o nome da aba CRP na planilha e tente novamente.');
+          setLoading(error.message || 'Não foi possível gerar o relatório. Confira o nome da aba CRP na planilha e tente novamente.');
           toast(error.message || 'Falha ao gerar relatório.', 'error', 'Erro na geração');
         }
       });
@@ -1519,6 +1530,7 @@
 
     async function init() {
       setupTabs();
+      setLoading('Carregando filtros e preparando relatório...', true);
       setGlobalActionLoading(true, null, 'Carregando...');
       try {
         const payload = await fetchPayload({ comissao: 'CRP' });
@@ -1531,7 +1543,7 @@
         toast('Filtros e relatório carregados com segurança.', 'success', 'Sistema pronto');
       } catch (error) {
         console.error(error);
-        setLoading('Não foi possível carregar os filtros. A aba CRP precisa existir na planilha.');
+        setLoading(error.message || 'Não foi possível carregar os filtros. A aba CRP precisa existir na planilha.');
         toast(error.message || 'Não foi possível carregar os filtros.', 'error', 'Inicialização indisponível');
       } finally {
         setGlobalActionLoading(false);
