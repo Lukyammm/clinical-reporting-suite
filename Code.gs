@@ -1,6 +1,6 @@
 /***********************************************************************
  * RELATÓRIO ANALÍTICO COSEP — App independente (mesmo modelo do Boletim)
- * Backend Apps Script. Serve Relatorios.html e fornece os dados (CRP).
+ * Backend Apps Script. Serve index.html e fornece os dados (CRP).
  * Autossuficiente: não depende do Code.gs do Boletim.
  ***********************************************************************/
 
@@ -84,7 +84,7 @@ function doGet(e) {
   }
 
   try {
-    const template = HtmlService.createTemplateFromFile('Relatorios');
+    const template = HtmlService.createTemplateFromFile('index');
     template.appUrl = ScriptApp.getService().getUrl();
     return template
       .evaluate()
