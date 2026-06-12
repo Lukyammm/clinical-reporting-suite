@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <title>Relatório Analítico COSEP</title>
+  <title>Relatório Analítico CRP</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -139,7 +139,7 @@
       <div class="flex min-w-0 items-center gap-3">
         <span class="flex h-9 w-9 items-center justify-center rounded-executive bg-cosep-teal text-white"><i class="fa-solid fa-chart-simple" aria-hidden="true"></i></span>
         <div class="min-w-0">
-          <strong class="block text-sm font-extrabold leading-tight tracking-tight">Relatório Analítico COSEP</strong>
+          <strong class="block text-sm font-extrabold leading-tight tracking-tight">Relatório Analítico CRP</strong>
           <span class="block truncate text-xs font-semibold text-slate-500">Dashboard executivo para avaliação institucional</span>
         </div>
       </div>
@@ -154,7 +154,7 @@
   </header>
 
   <main class="mx-auto grid w-[min(1440px,calc(100%-32px))] gap-4 py-4 md:py-5">
-    <section id="dashboard-view" class="grid gap-4" aria-label="Relatório COSEP">
+    <section id="dashboard-view" class="grid gap-4" aria-label="Relatório CRP">
       <section class="grid gap-3 md:grid-cols-2 xl:grid-cols-4" aria-label="Indicadores principais">
         <article class="panel p-4"><span class="text-[11px] font-black uppercase tracking-wider text-slate-500">Comissão</span><strong id="hero-comissao" class="mt-2 block text-3xl font-black tracking-tight">CRP</strong><small id="hero-fonte" class="mt-1 block text-xs font-semibold text-slate-500">Fonte não carregada</small></article>
         <article class="panel p-4"><span class="text-[11px] font-black uppercase tracking-wider text-slate-500">Conformidade</span><strong id="hero-conformidade" class="mt-2 block text-3xl font-black tracking-tight">--</strong><small id="hero-meta" class="mt-1 block text-xs font-semibold text-slate-500">Meta --</small></article>
@@ -273,8 +273,8 @@
     function renderMetricas(rel) { return `<section class="doc-metrics"><article class="doc-metric"><span>Avaliações</span><strong>${fmtNum(rel.totalAvaliacoes)}</strong></article><article class="doc-metric"><span>Conformidade</span><strong>${fmtPct(rel.conformidadeGeral)}</strong></article><article class="doc-metric"><span>Conformes</span><strong>${fmtNum(rel.conformes)}</strong></article><article class="doc-metric"><span>Não conformes</span><strong>${fmtNum(rel.naoConformes)}</strong></article></section>`; }
     function renderAlertasEstrutura(rel) { const alertas = (rel.alertasEstrutura || []).slice(0, 8); if (!alertas.length) return ''; const itens = alertas.map(item => `<li>${escapeHtml(item)}</li>`).join(''); return `<div class="structure-alert"><strong>Alertas de estrutura</strong><ul>${itens}</ul></div>`; }
     function renderChartsSlots() { return `<section class="doc-grid"><div class="chart-box"><canvas id="chart-evolucao" aria-label="Evolução mensal"></canvas></div><div class="chart-box"><canvas id="chart-distribuicao" aria-label="Distribuição dos itens"></canvas></div></section>`; }
-    function renderDocHeader(rel, aplicado, subtitulo) { const tipo = tipoLabel[state.tipoRelatorio] || tipoLabel.executivo; return `<header class="doc-top"><div class="doc-brand"><img class="doc-logo" src="${LOGO_INSTITUCIONAL}" alt="Logo institucional"><div><h2>Relatório Analítico COSEP</h2><p>${escapeHtml(tipo)} · Comissão ${escapeHtml(rel.comissao || 'CRP')} · ${escapeHtml(periodoTexto(aplicado))}</p></div></div><p class="doc-meta">${escapeHtml(subtitulo)}<br>Gerado em ${new Date().toLocaleDateString('pt-BR')}<br>Fonte: ${escapeHtml(rel.abaEncontrada || 'CRP')}</p></header>`; }
-    function renderDocFooter(page, total) { return `<footer class="doc-footer"><span>COSEP · Documento institucional</span><img class="footer-brand" src="${RODAPE_INSTITUCIONAL}" alt="Rodapé institucional"><span>Página ${page} de ${total}</span></footer>`; }
+    function renderDocHeader(rel, aplicado, subtitulo) { const tipo = tipoLabel[state.tipoRelatorio] || tipoLabel.executivo; return `<header class="doc-top"><div class="doc-brand"><img class="doc-logo" src="${LOGO_INSTITUCIONAL}" alt="Logo institucional"><div><h2>Relatório Analítico CRP</h2><p>${escapeHtml(tipo)} · Comissão ${escapeHtml(rel.comissao || 'CRP')} · ${escapeHtml(periodoTexto(aplicado))}</p></div></div><p class="doc-meta">${escapeHtml(subtitulo)}<br>Gerado em ${new Date().toLocaleDateString('pt-BR')}<br>Fonte: ${escapeHtml(rel.abaEncontrada || 'CRP')}</p></header>`; }
+    function renderDocFooter(page, total) { return `<footer class="doc-footer"><span>CRP · Documento institucional</span><img class="footer-brand" src="${RODAPE_INSTITUCIONAL}" alt="Rodapé institucional"><span>Página ${page} de ${total}</span></footer>`; }
     function renderDocPage(rel, aplicado, page, total, title, body) { return `<section class="document-page">${renderDocHeader(rel, aplicado, title)}<main class="doc-page-body">${body}</main>${renderDocFooter(page, total)}</section>`; }
     function renderRelatorio() { const rel = state.payload?.relatorio; if (!rel) return; destroyCharts(); const aplicado = state.payload.aplicado || {}; const recorte = aplicado.unidades?.length ? aplicado.unidades.join(', ') : 'todos os setores elegíveis'; const page1 = `<section class="doc-hero"><div><span class="doc-kicker">Análise institucional</span><h1 class="doc-title">Panorama de conformidade dos registros assistenciais</h1><p class="doc-subtitle">Recorte: ${escapeHtml(recorte)}.</p></div><aside class="doc-score"><strong>${fmtPct(rel.conformidadeGeral)}</strong><span>Conformidade geral</span></aside></section>${renderMetricas(rel)}${renderTexto('1. Introdução', textAreas.intro.value)}${renderTexto('2. Metodologia', textAreas.metodo.value)}${renderChartsSlots()}`; const page2 = `${renderTexto('3. Análise crítica', textAreas.analise.value)}${renderAlertasEstrutura(rel)}<section class="doc-section"><h3>4. Indicadores críticos</h3>${renderTabelaIndicadores(rel)}</section>`; const page3 = `<section class="doc-section"><h3>5. Setores com maior oportunidade</h3>${renderTabelaSetores(rel)}</section>${renderTexto('6. Plano de ação recomendado', textAreas.plano.value)}${renderTexto('7. Conclusão', textAreas.conclusao.value)}`; el('relatorio').innerHTML = [renderDocPage(rel, aplicado, 1, 3, 'Panorama executivo', page1), renderDocPage(rel, aplicado, 2, 3, 'Análise de criticidade', page2), renderDocPage(rel, aplicado, 3, 3, 'Recomendações e encaminhamentos', page3)].join(''); el('relatorio').classList.remove('hidden'); el('report-tools').classList.remove('hidden'); el('report-tools').classList.add('flex'); renderCharts(rel).catch(console.error); }
     function destroyCharts() { state.charts.forEach(chart => chart.destroy()); state.charts = []; }
