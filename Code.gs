@@ -1,7 +1,22 @@
 /***********************************************************************
- * RELATÓRIO ANALÍTICO CRP — App independente (mesmo modelo do Boletim)
- * Backend Apps Script. Serve index.html e fornece os dados (CRP).
- * Autossuficiente: não depende do Code.gs do Boletim.
+ * RELATÓRIO ANALÍTICO CRP — backend Apps Script
+ *
+ * Arquitetura: o servidor lê a base CRP uma única vez por requisição,
+ * classifica cada item dos indicadores (Conforme / Não conforme / N.A.)
+ * e devolve um dataset compacto. Todo o filtro, agregação e montagem do
+ * documento acontecem no navegador — sem novas viagens ao servidor a
+ * cada mudança de filtro.
+ *
+ * Rotas:
+ *   doGet                      → serve index.html
+ *   doGet?api=dados            → dataset compacto + configuração pública
+ *   doGet?api=configrel        → configuração completa (admin)
+ *
+ * RPCs (google.script.run):
+ *   obterDadosRelatorio()      → mesmo payload de api=dados
+ *   obterConfigRelCRP()      → configuração completa (admin)
+ *   salvarConfigRelCRP(cfg)  → grava configuração
+ *   restaurarConfigRelCRP()  → restaura configuração padrão
  ***********************************************************************/
 
 /* ===== Parametrização ===== */
@@ -117,7 +132,7 @@ function doGet(e) {
   }
 
   if (params.api === 'configrel') {
-    return responderJson(obterConfigRelCosep(params.refresh === '1' || params.refresh === 'true'));
+    return responderJson(obterConfigRelCRP(params.refresh === '1' || params.refresh === 'true'));
   }
 
   try {
@@ -125,7 +140,7 @@ function doGet(e) {
     template.appUrl = ScriptApp.getService().getUrl();
     return template
       .evaluate()
-      .setTitle('Relatório Analítico CRP')
+      .setTitle('Relatório Analítico da CRP')
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   } catch (erro) {
     registrarErro('html-route', erro);
@@ -241,16 +256,16 @@ function normalizarAno(valor) {
 
 /* ============================================================
    CONFIGURAÇÃO SELF-SERVICE DO RELATÓRIO
-   A configuração editável vive na aba COSEP_REL_CONFIG da própria
+   A configuração editável vive na aba CRP_REL_CONFIG da própria
    planilha. Script Properties é apenas espelho técnico/fallback.
    ============================================================ */
-const CONFIG_REL_PROP_KEY = 'COSEP_REL_CONFIG_V1';
-const CONFIG_REL_BOOTSTRAP_PROP_KEY = 'COSEP_REL_CONFIG_SPREADSHEET_ID';
-const CONFIG_REL_ADMINS_PROP_KEY = 'COSEP_REL_ADMINS';
-const CONFIG_REL_SHEET = 'COSEP_REL_CONFIG';
-const CONFIG_REL_LOG_SHEET = 'COSEP_REL_CONFIG_LOG';
+const CONFIG_REL_PROP_KEY = 'CRP_REL_CONFIG_V1';
+const CONFIG_REL_BOOTSTRAP_PROP_KEY = 'CRP_REL_CONFIG_SPREADSHEET_ID';
+const CONFIG_REL_ADMINS_PROP_KEY = 'CRP_REL_ADMINS';
+const CONFIG_REL_SHEET = 'CRP_REL_CONFIG';
+const CONFIG_REL_LOG_SHEET = 'CRP_REL_CONFIG_LOG';
 const CONFIG_REL_SCHEMA_VERSION = '2.0';
-const CONFIG_REL_CACHE_KEY = 'COSEP_REL_CONFIG_CACHE_V2';
+const CONFIG_REL_CACHE_KEY = 'CRP_REL_CONFIG_CACHE_V2';
 const CONFIG_REL_CACHE_TTL_SECONDS = 21600; // 6 horas
 
 const TEXTOS_PADRAO_REL = {
@@ -621,7 +636,7 @@ function usuarioPodeEditarRel() {
   return !!email && admins.indexOf(email) !== -1;
 }
 
-function obterConfigRelCosep(forcarRefresh) {
+function obterConfigRelCRP(forcarRefresh) {
   return executarRota('rpc-configrel-get', () => ({
     success: true,
     config: obterConfigRel(forcarRefresh === true || forcarRefresh === '1'),
@@ -631,7 +646,7 @@ function obterConfigRelCosep(forcarRefresh) {
   }));
 }
 
-function salvarConfigRelCosep(novaConfig) {
+function salvarConfigRelCRP(novaConfig) {
   return executarRota('rpc-configrel-save', () => executarComLockConfigRel('rpc-configrel-save-lock', () => {
     if (!usuarioPodeEditarRel()) return { success: false, mensagem: 'Você não tem permissão para alterar as configurações.' };
     const merged = mesclarConfigRel(configPadraoRel(), novaConfig || {});
@@ -643,7 +658,7 @@ function salvarConfigRelCosep(novaConfig) {
   }));
 }
 
-function restaurarConfigRelCosep() {
+function restaurarConfigRelCRP() {
   return executarRota('rpc-configrel-reset', () => executarComLockConfigRel('rpc-configrel-reset-lock', () => {
     if (!usuarioPodeEditarRel()) return { success: false, mensagem: 'Você não tem permissão para alterar as configurações.' };
     const cfgPadraoAtualizada = configPadraoRel();
