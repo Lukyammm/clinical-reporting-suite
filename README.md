@@ -1,4 +1,4 @@
-# RELATORIOS
+# Hospital Reporting Dashboard
 
 Hospital reporting dashboard built with HTML, JavaScript, Google Apps Script, and Google Workspace.
 
