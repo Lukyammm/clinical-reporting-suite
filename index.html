@@ -399,8 +399,8 @@
       font-weight: 700;
     }
 
-    .doc-assinaturas { display: grid; grid-template-columns: 1fr 1fr; gap: 36px; margin-top: 26px; break-inside: avoid; }
-    .assinatura { text-align: center; font-size: 10px; color: var(--suave); }
+    .doc-assinaturas { display: flex; justify-content: center; margin-top: 52px; break-inside: avoid; }
+    .assinatura { text-align: center; font-size: 10px; color: var(--suave); min-width: 300px; max-width: 360px; }
     .assinatura .linha-ass { border-top: 1px solid #9fb1b4; padding-top: 6px; font-weight: 700; color: var(--tinta); }
 
     .doc-rodape {
@@ -718,6 +718,28 @@
     FILTROS.forEach(f => { state.sel[f.id] = new Set(); });
     CHAVES_TEXTO.forEach(k => { state.textos[k] = { manual: false, valor: '' }; });
 
+    // Persistência local das edições manuais: o texto padrão continua na
+    // memória do app; o que o usuário altera é guardado em tempo real no
+    // navegador (debounce curto, sem travar a digitação) e recuperado ao reabrir.
+    const TEXTOS_STORE = 'crpRelatorioTextos.v1';
+    function salvarTextosLocais() {
+      try {
+        const dados = {};
+        CHAVES_TEXTO.forEach(k => { if (state.textos[k] && state.textos[k].manual) dados[k] = state.textos[k].valor; });
+        localStorage.setItem(TEXTOS_STORE, JSON.stringify(dados));
+      } catch (e) { /* armazenamento indisponível: segue só em memória */ }
+    }
+    const salvarTextosLocaisDebounce = debounce(salvarTextosLocais, 250);
+    function carregarTextosLocais() {
+      try {
+        const dados = JSON.parse(localStorage.getItem(TEXTOS_STORE) || '{}');
+        CHAVES_TEXTO.forEach(k => {
+          if (dados && typeof dados[k] === 'string') state.textos[k] = { manual: true, valor: dados[k] };
+        });
+      } catch (e) { /* ignora dados corrompidos */ }
+    }
+    carregarTextosLocais();
+
     /* ================= Utilitários ================= */
     function $(id) { return document.getElementById(id); }
     function esc(valor) {
@@ -835,8 +857,12 @@
 
       regs.forEach(r => {
         const mes = r[R.mes];
+        const ano = r[R.ano];
         const unidade = r[R.unidade];
-        if (!evolucaoMap[mes]) evolucaoMap[mes] = { mes, conformes: 0, naoConformes: 0 };
+        // Série temporal chaveada por ano+mês: meses iguais de anos diferentes
+        // (jan/24, jan/25) viram pontos distintos, sem "compilar" no mesmo ponto.
+        const chaveEvo = ano + " " + mes;
+        if (!evolucaoMap[chaveEvo]) evolucaoMap[chaveEvo] = { mes, ano, conformes: 0, naoConformes: 0 };
         if (!setoresMap[unidade]) setoresMap[unidade] = { setor: unidade, avaliacoes: 0, conformes: 0, naoConformes: 0 };
         setoresMap[unidade].avaliacoes++;
         porSatisfacao[r[R.satisfacao]] = (porSatisfacao[r[R.satisfacao]] || 0) + 1;
@@ -858,8 +884,8 @@
         for (let i = 0; i < indicadores.length; i++) {
           const c = flags.charAt(i);
           const ind = indicadores[i];
-          if (c === 'C') { ind.conformes++; ind.avaliados++; conformes++; evolucaoMap[mes].conformes++; setoresMap[unidade].conformes++; }
-          else if (c === 'N') { ind.naoConformes++; ind.avaliados++; naoConformes++; evolucaoMap[mes].naoConformes++; setoresMap[unidade].naoConformes++; }
+          if (c === 'C') { ind.conformes++; ind.avaliados++; conformes++; evolucaoMap[chaveEvo].conformes++; setoresMap[unidade].conformes++; }
+          else if (c === 'N') { ind.naoConformes++; ind.avaliados++; naoConformes++; evolucaoMap[chaveEvo].naoConformes++; setoresMap[unidade].naoConformes++; }
           else if (c === 'A') { ind.naoSeAplica++; naoSeAplica++; }
           else if (c === 'V' || c === '') { ind.vazios++; vazios++; }
           else { ind.outros++; outros++; }
@@ -880,7 +906,7 @@
       // ("Não informado" etc.) continuam nos totais e no filtro de mês.
       const evolucao = Object.values(evolucaoMap)
         .filter(e => MES_ORDEM[e.mes])
-        .sort((a, b) => MES_ORDEM[a.mes] - MES_ORDEM[b.mes])
+        .sort((a, b) => (Number(a.ano) - Number(b.ano)) || (MES_ORDEM[a.mes] - MES_ORDEM[b.mes]))
         .map(e => ({ ...e, percentual: percentual(e.conformes, e.naoConformes) || 0 }));
 
       const setores = Object.values(setoresMap)
@@ -992,8 +1018,15 @@
         `<circle cx="${pts[i][0]}" cy="${pts[i][1]}" r="4" fill="#0f766e" stroke="#ffffff" stroke-width="2"/>` +
         (mostraValores ? `<text x="${pts[i][0]}" y="${pts[i][1] - 11}" text-anchor="middle" font-size="13" font-weight="800" fill="#0b5a54">${fmtRot(e.percentual)}</text>` : '')).join('');
 
-      const rotulos = evolucao.map((e, i) =>
-        `<text x="${pts[i][0]}" y="${H - 10}" text-anchor="middle" font-size="13" font-weight="600" fill="#5d6f73">${esc(e.mes.slice(0, 3))}</text>`).join('');
+      // Afina os rótulos para no máximo ~12 no eixo, sempre mantendo a virada
+      // de ano visível, de modo que muitos meses não poluam a base do gráfico.
+      const passo = Math.max(1, Math.ceil(evolucao.length / 12));
+      const rotulos = evolucao.map((e, i) => {
+        const viradaAno = i === 0 || evolucao[i - 1].ano !== e.ano;
+        if (!(viradaAno || i % passo === 0)) return '';
+        const aa = String(e.ano).slice(-2);
+        return `<text x="${pts[i][0]}" y="${H - 10}" text-anchor="middle" font-size="12.5" font-weight="600" fill="#5d6f73">${esc(e.mes.slice(0, 3))}/${esc(aa)}</text>`;
+      }).join('');
 
       const yMeta = y(meta);
       const linhaMeta = `<line x1="${mx}" y1="${yMeta}" x2="${W - mr}" y2="${yMeta}" stroke="#b45709" stroke-width="1.4" stroke-dasharray="5 4" opacity=".8"/>` +
@@ -1204,8 +1237,7 @@
         ${secaoTexto(6, 'plano')}
         ${secaoTexto(7, 'conclusao')}
         <div class="doc-assinaturas">
-          <div class="assinatura"><div class="linha-ass">Responsável pela análise</div>Comissão de Revisão de Prontuários</div>
-          <div class="assinatura"><div class="linha-ass">Coordenação CRP</div>Ciência e validação institucional</div>
+          <div class="assinatura"><div class="linha-ass">Presidente da Comissão de Revisão de Prontuários</div></div>
         </div>`;
 
       const pagina4 = `
@@ -1231,12 +1263,14 @@
           const valor = typeof div.innerText === 'string' ? div.innerText : div.textContent;
           state.textos[chave] = { manual: true, valor };
           marcarEdicao(chave, true);
+          salvarTextosLocaisDebounce();
         });
       });
       document.querySelectorAll('[data-restaurar]').forEach(btn => {
         btn.addEventListener('click', () => {
           const chave = btn.dataset.restaurar;
           state.textos[chave] = { manual: false, valor: '' };
+          salvarTextosLocais();
           const div = document.querySelector(`[data-texto="${chave}"]`);
           if (div) div.textContent = textoAtual(chave, tokensAtuais(agregar(registrosFiltrados())));
           marcarEdicao(chave, false);
@@ -1631,6 +1665,7 @@
       });
       $('btn-textos-padrao').addEventListener('click', () => {
         CHAVES_TEXTO.forEach(k => { state.textos[k] = { manual: false, valor: '' }; });
+        salvarTextosLocais();
         renderTudo();
         toast('Textos regenerados com os números do recorte atual.', 'sucesso', 'Texto');
       });
