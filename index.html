@@ -304,15 +304,9 @@
     .doc-metrica { border: 1px solid var(--linha); border-radius: 9px; padding: 9px 10px; background: #fcfdfd; break-inside: avoid; }
     .doc-metrica span { display: block; color: var(--suave); font-size: 8.6px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
     .doc-metrica strong { display: block; margin-top: 4px; font-size: 17px; line-height: 1; letter-spacing: -.02em; font-weight: 800; }
-    .barra-classif { display: flex; gap: 8px; align-items: stretch; }
-    .classif-grupo { display: flex; flex-direction: column; min-width: 0; }
-    .classif-grupo-rot { display: block; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-bottom: 4px; margin-bottom: 4px; border-bottom: 2px solid currentColor; }
-    .classif-grupo-rot b { font-size: 11px; letter-spacing: -.01em; }
-    .classif-grupo.bom { color: var(--brand-escuro); }
-    .classif-grupo.ruim { color: #b45709; }
-    .classif-grupo-barra { display: flex; gap: 2px; height: 24px; border-radius: 7px; overflow: hidden; background: #e9eeed; }
-    .classif-grupo-barra > i { display: flex; align-items: center; justify-content: center; height: 100%; font-style: normal; font-size: 9.5px; font-weight: 700; color: rgba(255,255,255,.95); white-space: nowrap; overflow: hidden; min-width: 2px; letter-spacing: .01em; }
-    .classif-grade { display: grid; grid-template-columns: repeat(4,1fr); gap: 6px; margin-top: 10px; }
+    .classif-taxa-badge { font-size: 11px; font-weight: 600; color: var(--brand-escuro); background: var(--brand-claro); border-radius: 7px; padding: 3px 9px; white-space: nowrap; flex: none; }
+    .classif-taxa-badge b { font-size: 13px; font-weight: 800; letter-spacing: -.01em; }
+    .classif-grade { display: grid; grid-template-columns: repeat(4,1fr); gap: 6px; margin-top: 2px; }
     .classif-celula { border-radius: 8px; padding: 9px 11px; border-left: 3px solid transparent; background: #f9fbfb; display: flex; flex-direction: column; gap: 3px; }
     .classif-celula-top { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; }
     .classif-num { font-size: 21px; line-height: 1; font-weight: 800; letter-spacing: -.025em; color: var(--tinta); }
@@ -1144,25 +1138,17 @@
 
     function barraClassificacao(rel) {
       const total = rel.prontuariosClassificados;
-      const segmento = f => {
-        const pct = (rel.classif[f.chave] / total) * 100;
-        return `<i style="flex:${pct.toFixed(4)};background:${f.cor}" title="${f.rotulo} (${f.faixa}): ${fmtPct(pct)}"></i>`;
-      };
-      const grupo = (classe, rotulo, faixas) => {
-        const n = faixas.reduce((s, f) => s + rel.classif[f.chave], 0);
-        const pct = (n / total) * 100;
-        return `<div class="classif-grupo ${classe}" style="flex:${pct.toFixed(4)}">
-          <span class="classif-grupo-rot">${esc(rotulo)} · <b>${fmtPct(pct)}</b></span>
-          <div class="classif-grupo-barra">${faixas.map(segmento).join('')}</div>
-        </div>`;
-      };
-      const barra = total ? `<div class="barra-classif">
-        ${grupo('bom', 'Bons + excelentes', CLASSIF_FAIXAS.slice(0, 2))}
-        ${grupo('ruim', 'A melhorar', CLASSIF_FAIXAS.slice(2))}
-      </div>` : '<div class="doc-recorte" style="margin:0">Sem prontuários com resultado calculado no recorte selecionado.</div>';
+      if (!total) {
+        return `<section class="doc-secao">
+          <div class="doc-secao-cab"><h3>Classificação dos prontuários avaliados</h3></div>
+          <div class="doc-recorte" style="margin:0">Sem prontuários com resultado calculado no recorte selecionado.</div>
+        </section>`;
+      }
+      const badge = rel.taxaBonsExcelentes != null
+        ? `<span class="classif-taxa-badge"><b>${fmtPct(rel.taxaBonsExcelentes)}</b> bons + excelentes</span>` : '';
       const cards = CLASSIF_FAIXAS.map(f => {
         const n = rel.classif[f.chave];
-        const pct = total ? fmtPct((n / total) * 100) : '—';
+        const pct = fmtPct((n / total) * 100);
         return `<div class="classif-celula" style="border-left-color:${f.cor}">
           <div class="classif-celula-top">
             <strong class="classif-num">${fmtNum(n)}</strong>
@@ -1174,8 +1160,7 @@
       const nota = rel.classif.semClassificacao
         ? `<p style="margin:5px 0 0;font-size:10px;color:var(--suave)">${fmtNum(rel.classif.semClassificacao)} prontuários sem resultado calculado</p>` : '';
       return `<section class="doc-secao">
-        <div class="doc-secao-cab"><h3>Classificação dos prontuários avaliados</h3></div>
-        ${barra}
+        <div class="doc-secao-cab"><h3>Classificação dos prontuários avaliados</h3>${badge}</div>
         <div class="classif-grade">${cards}</div>
         ${nota}
       </section>`;
