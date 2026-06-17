@@ -419,13 +419,16 @@
       border-top: 1px solid var(--linha);
       display: flex;
       align-items: center;
-      justify-content: space-between;
+      justify-content: center;
       gap: 12px;
       color: var(--suave);
       font-size: 8.8px;
       font-weight: 700;
     }
-    .doc-rodape img { height: 38px; max-width: 120mm; object-fit: contain; }
+    .doc-rodape span { flex: 1; }
+    .doc-rodape span:first-child { text-align: left; }
+    .doc-rodape span:last-child { text-align: right; }
+    .doc-rodape img { height: 38px; max-width: 120mm; object-fit: contain; flex-shrink: 0; }
 
     /* ===== Toasts e diálogo ===== */
     .toasts { position: fixed; right: 16px; top: 66px; z-index: 100; width: min(380px, calc(100vw - 32px)); display: grid; gap: 8px; pointer-events: none; }
