@@ -713,11 +713,7 @@
     const FILTROS = [
       { id: 'anos', rotulo: 'Ano', curto: 'Ano', idx: R.ano, ordenar: (a, b) => Number(a) - Number(b) || a.localeCompare(b, 'pt-BR') },
       { id: 'meses', rotulo: 'Mês', curto: 'Mês', idx: R.mes, ordenar: (a, b) => (MES_ORDEM[a] || 99) - (MES_ORDEM[b] || 99) || a.localeCompare(b, 'pt-BR') },
-      { id: 'unidades', rotulo: 'Setor', curto: 'Setor', idx: R.unidade },
-      { id: 'eixos', rotulo: 'Eixo', curto: 'Eixo', idx: R.eixo },
-      { id: 'categorias', rotulo: 'Categoria', curto: 'Categoria', idx: R.categoria },
-      { id: 'satisfacoes', rotulo: 'Satisfação', curto: 'Satisfação', idx: R.satisfacao },
-      { id: 'status', rotulo: 'Status', curto: 'Status', idx: R.status }
+      { id: 'unidades', rotulo: 'Setor', curto: 'Setor', idx: R.unidade }
     ];
 
     const CHAVES_TEXTO = ['intro', 'metodo', 'analise', 'plano', 'conclusao'];
