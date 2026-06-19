@@ -1798,13 +1798,26 @@
       const marcadores = serie.map((e, i) => e.valor == null ? '' :
         `<circle cx="${pts[i][0]}" cy="${pts[i][1]}" r="4.5" fill="#0f766e" stroke="#ffffff" stroke-width="2"/>` +
         (mostraValores ? `<text x="${pts[i][0]}" y="${pts[i][1] - 12}" text-anchor="${ancora(i)}" font-size="14" font-weight="800" fill="#0b5a54">${fmtRot(e.valor)}%</text>` : '')).join('');
-      const passo = Math.max(1, Math.ceil(serie.length / 12));
+      // Rótulos do eixo X com prevenção de colisão: o 1º e o último são
+      // sempre desenhados; os intermediários só aparecem se não encostarem
+      // no rótulo anterior já desenhado nem no último (largura ~46px por
+      // "Mmm/AA"). Evita a sobreposição tipo "Jan/2Fev/24".
+      const labelW = 46;
+      const margem = 7;
+      const xFinal = W - mr;
+      let ultimoDir = -Infinity;
       const rotulos = serie.map((e, i) => {
-        const viradaAno = i === 0 || serie[i - 1].ano !== e.ano;
-        if (!(viradaAno || i % passo === 0)) return '';
+        const px = i === 0 ? mx : i === ultimo ? xFinal : x(i);
+        const anc = ancora(i);
+        const esq = anc === 'start' ? px : anc === 'end' ? px - labelW : px - labelW / 2;
+        const dir = esq + labelW;
+        if (i !== 0 && i !== ultimo) {
+          if (esq - ultimoDir < margem) return '';          // colaria no anterior
+          if ((xFinal - labelW) - esq < margem) return '';  // colaria no último
+        }
+        ultimoDir = dir;
         const aa = String(e.ano).slice(-2);
-        const px = i === 0 ? mx : i === ultimo ? W - mr : x(i);
-        return `<text x="${px}" y="${H - 12}" text-anchor="${ancora(i)}" font-size="13" font-weight="600" fill="#5d6f73">${esc(String(e.mes).slice(0, 3))}/${esc(aa)}</text>`;
+        return `<text x="${px}" y="${H - 12}" text-anchor="${anc}" font-size="13" font-weight="600" fill="#5d6f73">${esc(String(e.mes).slice(0, 3))}/${esc(aa)}</text>`;
       }).join('');
       let linhaMeta = '';
       if (meta != null) {
@@ -2211,6 +2224,21 @@
         clone.querySelectorAll('.pagina').forEach(p => { p.style.margin = '0 auto'; p.style.border = '0'; p.style.borderRadius = '0'; p.style.boxShadow = 'none'; });
         palco.appendChild(clone);
         document.body.appendChild(palco);
+        // html2canvas falha ao rasterizar SVG com largura percentual (viewBox
+        // sem dimensão em px): o gráfico colapsa para zero e o PDF sai branco.
+        // Já com o clone no DOM e renderizado, fixamos largura/altura em px a
+        // partir do tamanho real de cada SVG.
+        clone.querySelectorAll('svg').forEach(svg => {
+          const r = svg.getBoundingClientRect();
+          if (r.width && r.height) {
+            svg.setAttribute('width', Math.round(r.width));
+            svg.setAttribute('height', Math.round(r.height));
+            svg.style.width = Math.round(r.width) + 'px';
+            svg.style.height = Math.round(r.height) + 'px';
+            svg.style.maxWidth = 'none';
+            svg.style.minHeight = '0';
+          }
+        });
         const nome = `relatorio-${state.comissao.toLowerCase()}-${new Date().toISOString().slice(0, 10)}.pdf`;
         try {
           await html2pdf().set({
