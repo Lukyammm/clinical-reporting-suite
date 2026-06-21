@@ -1272,8 +1272,9 @@
       return `<svg class="spark" viewBox="0 0 ${W} ${H}" role="img" aria-hidden="true">${base}${linhas}${ult}</svg>`;
     }
 
-    function tabelaEvolucaoIndicadores(periodos) {
-      if (periodos.length < 2) return `<div class="doc-recorte" style="margin:0">A evolução exige pelo menos dois períodos no recorte.</div>`;
+    function tabelaEvolucaoIndicadores(periodos, opts) {
+      opts = opts || {};
+      if (periodos.length < 2 && !opts.forcar) return `<div class="doc-recorte" style="margin:0">A evolução exige pelo menos dois períodos no recorte.</div>`;
       const cabMeses = periodos.map(p => `<th class="num col-mes">${esc(rotuloPeriodo(p.ano, p.mes))}</th>`).join('');
       const indicadores = periodos[0].rel.indicadores;
       const linhas = indicadores.map((ind, idx) => {
@@ -1305,7 +1306,8 @@
     // Classificação dos prontuários por período: uma linha por mês/ano com as
     // contagens de cada faixa, % bons+excelentes e a barra de distribuição.
     // Não traz linha "Consolidado" — o foco é a leitura período a período.
-    function classificacaoPorPeriodo(periodos, relConsolidado) {
+    function classificacaoPorPeriodo(periodos, relConsolidado, opts) {
+      opts = opts || {};
       if (!relConsolidado.prontuariosClassificados) {
         return `<section class="doc-secao">
           <div class="doc-secao-cab"><h3>Classificação dos prontuários por período</h3></div>
@@ -1329,8 +1331,10 @@
           <td>${miniBarraClassif(c)}</td>
         </tr>`;
       };
-      const nota = periodos.length > 1 ? `<span class="doc-secao-nota">${periodos.length} períodos no recorte</span>` : '';
-      const semClass = relConsolidado.classif.semClassificacao
+      const totalPer = opts.totalPeriodos || periodos.length;
+      const nota = totalPer > 1 ? `<span class="doc-secao-nota">${totalPer} períodos no recorte${opts.parte ? ` · ${opts.parte}` : ''}</span>` : '';
+      // A nota de "sem resultado" é global: mostra só na primeira parte.
+      const semClass = (opts.mostrarSemClass !== false) && relConsolidado.classif.semClassificacao
         ? `<p style="margin:5px 0 0;font-size:10px;color:var(--suave)">${fmtNum(relConsolidado.classif.semClassificacao)} prontuários sem resultado calculado no recorte</p>` : '';
       return `<section class="doc-secao">
         <div class="doc-secao-cab"><h3>Classificação dos prontuários por período</h3>${nota}</div>
@@ -1375,8 +1379,9 @@
     // Conformidade período a período (foco em itens auditáveis). A classificação
     // dos prontuários é coberta por classificacaoPorPeriodo. Só aparece com 2+
     // períodos; com um único período, o cabeçalho executivo já resume.
-    function tabelaPorPeriodo(periodos, relConsolidado) {
-      if (periodos.length < 2) return '';
+    function tabelaPorPeriodo(periodos, relConsolidado, opts) {
+      opts = opts || {};
+      if (periodos.length < 2 && !opts.forcar) return '';
       const linha = (rotulo, rel, classe = '') => `<tr class="${classe}">
           <td>${esc(rotulo)}</td>
           <td class="num">${fmtNum(rel.totalAvaliacoes)}</td>
@@ -1385,9 +1390,11 @@
           <td class="num">${seloPct(rel.conformidadeGeral)}</td>
         </tr>`;
       const linhas = periodos.map(p => linha(rotuloPeriodo(p.ano, p.mes), p.rel)).join('');
-      const total = linha('Consolidado', relConsolidado, 'linha-total');
+      // Consolidado só aparece na última parte (default: sempre, p/ caso comum).
+      const total = (opts.consolidado === false) ? '' : linha('Consolidado', relConsolidado, 'linha-total');
+      const totalPer = opts.totalPeriodos || periodos.length;
       return `<section class="doc-secao">
-        <div class="doc-secao-cab"><h3>Conformidade por período</h3><span class="doc-secao-nota">${periodos.length} períodos no recorte</span></div>
+        <div class="doc-secao-cab"><h3>Conformidade por período</h3><span class="doc-secao-nota">${totalPer} períodos no recorte${opts.parte ? ` · ${opts.parte}` : ''}</span></div>
         <div class="doc-tabela"><table>
           <thead><tr><th>Período</th><th class="num">Aval.</th><th class="num">Conformes</th><th class="num">Não conf.</th><th class="num">Conformidade</th></tr></thead>
           <tbody>${linhas}${total}</tbody></table></div>
@@ -1479,8 +1486,10 @@
       // Quebra por período calculada uma única vez e propagada às seções.
       const periodos = agregarPorPeriodo(registrosFiltrados());
 
-      // Página 1 — painel: capa, métricas, classificação e tabela por período.
-      const pagina1 = `
+      // Página 1 — painel: capa + métricas. As tabelas por período entram logo
+      // abaixo (mesma folha no caso comum) e transbordam para folhas dedicadas
+      // quando há muitos meses — ver montagem no fim da função.
+      const painel = `
         <section class="doc-capa">
           <div>
             <h1 class="doc-titulo">Panorama de qualidade dos registros assistenciais</h1>
@@ -1505,9 +1514,28 @@
           <article class="doc-metrica"><span>Itens auditáveis</span><strong>${fmtNum(rel.totalAuditavel)}</strong></article>
           <article class="doc-metrica"><span>Conformes</span><strong style="color:var(--verde)">${fmtNum(rel.conformes)}</strong></article>
           <article class="doc-metrica"><span>Não conformes</span><strong style="color:var(--vermelho)">${fmtNum(rel.naoConformes)}</strong></article>
-        </section>
-        ${classificacaoPorPeriodo(periodos, rel)}
-        ${tabelaPorPeriodo(periodos, rel)}`;
+        </section>`;
+
+      // Tabelas por período (classificação + conformidade) paginadas: a 1ª parte
+      // fica na folha do painel; as demais ganham folhas próprias. Cada parte é
+      // dimensionada para caber em uma folha (validado no harness).
+      const P = periodos.length;
+      const INLINE_PER = 7;   // períodos que cabem na folha do painel
+      const CONT_PER = 11;    // períodos por folha de continuação (2 tabelas)
+      const blocosPer = [];
+      if (P) {
+        blocosPer.push(periodos.slice(0, INLINE_PER));
+        for (let i = INLINE_PER; i < P; i += CONT_PER) blocosPer.push(periodos.slice(i, i + CONT_PER));
+      }
+      const nPartesPer = blocosPer.length;
+      const secaoPeriodo = (bloco, bi) => {
+        const ultimo = bi === nPartesPer - 1;
+        const parte = nPartesPer > 1 ? `parte ${bi + 1}/${nPartesPer}` : '';
+        return classificacaoPorPeriodo(bloco, rel, { totalPeriodos: P, parte, mostrarSemClass: bi === 0 })
+          + tabelaPorPeriodo(bloco, rel, { totalPeriodos: P, parte, consolidado: ultimo, forcar: nPartesPer > 1 });
+      };
+      const pagina1 = painel + (P ? secaoPeriodo(blocosPer[0], 0) : '');
+      const paginasPeriodoExtra = blocosPer.slice(1).map((b, i) => secaoPeriodo(b, i + 1));
 
       // Página 2 — introdução, metodologia e gráfico de evolução.
       const pagina2 = `
@@ -1551,16 +1579,33 @@
           <div class="doc-secao-cab"><h3>Anexo A. Desempenho completo dos indicadores</h3></div>
           ${tabelaAnexo(rel)}
         </section>`;
-      const anexoB = `
+      // Anexo B (heatmap): cada folha mostra os 29 indicadores e até 6 colunas
+      // de mês — 6 meses = largura exata do A4. Com mais meses, quebra em folhas.
+      const COLS_HEAT = 6;
+      const anexoBSecao = (bloco, parte) => `
         <section class="doc-secao anexo-compacto">
-          <div class="doc-secao-cab"><h3>Anexo B. Evolução do desempenho dos indicadores</h3>${periodos.length >= 2 ? `<span class="doc-secao-nota">${periodos.length} períodos no recorte</span>` : ''}</div>
-          ${tabelaEvolucaoIndicadores(periodos)}
+          <div class="doc-secao-cab"><h3>Anexo B. Evolução do desempenho dos indicadores</h3><span class="doc-secao-nota">${P} períodos no recorte${parte ? ` · ${parte}` : ''}</span></div>
+          ${tabelaEvolucaoIndicadores(bloco, { forcar: true })}
         </section>`;
+      const paginasAnexoB = [];
+      if (P < 2) {
+        paginasAnexoB.push(`
+          <section class="doc-secao anexo-compacto">
+            <div class="doc-secao-cab"><h3>Anexo B. Evolução do desempenho dos indicadores</h3></div>
+            ${tabelaEvolucaoIndicadores(periodos)}
+          </section>`);
+      } else {
+        const blocosH = [];
+        for (let i = 0; i < P; i += COLS_HEAT) blocosH.push(periodos.slice(i, i + COLS_HEAT));
+        blocosH.forEach((b, bi) => paginasAnexoB.push(
+          anexoBSecao(b, blocosH.length > 1 ? `parte ${bi + 1}/${blocosH.length}` : '')
+        ));
+      }
 
       // Cada item do array é exatamente uma folha A4; a numeração do rodapé é
       // sequencial e o total acompanha a presença (ou não) dos anexos.
-      const corpos = [pagina1, pagina2, pagina3, pagina4];
-      if (state.incluirAnexo) corpos.push(anexoA, anexoB);
+      const corpos = [pagina1, ...paginasPeriodoExtra, pagina2, pagina3, pagina4];
+      if (state.incluirAnexo) corpos.push(anexoA, ...paginasAnexoB);
       const total = corpos.length;
       $('documento').innerHTML = corpos.map((c, i) => montarPagina(tokens, i + 1, total, c)).join('');
       ligarTextosEditaveis(tokens, () => tokensAtuais(agregar(registrosFiltrados())));
@@ -1908,21 +1953,27 @@
       return `<div class="grafico-caixa"${full ? ' style="grid-column: 1 / -1"' : ''}><h4>${esc(titulo)}</h4>${conteudo}</div>`;
     }
 
-    // Retorna gráficos e tabela da evolução separadamente, para poderem ser
-    // distribuídos em folhas diferentes sem estourar o A4.
-    function indicadorEvolucaoCRO(rel) {
+    // Gráficos de evolução (linhas) da CRO.
+    function graficosEvolucaoCRO(rel) {
       const serieAval = rel.evolucao.map(e => ({ ano: e.ano, mes: e.mes, valor: e.taxaAnalisados }));
       const serieLon = rel.evolucao.map(e => ({ ano: e.ano, mes: e.mes, valor: e.taxaLondres }));
       const temEvol = rel.evolucao.length >= 1;
-      const tabela = rel.evolucao.length >= 2 ? `<div class="doc-tabela"><table>
-        <thead><tr><th>Período</th><th class="num">Óbitos</th><th class="num">Analisados</th><th class="num">Tx. avaliação</th><th class="num">A esclarecer</th></tr></thead>
-        <tbody>${rel.evolucao.map(e => `<tr><td>${esc(rotuloPeriodo(e.ano, e.mes))}</td><td class="num">${fmtNum(e.total)}</td><td class="num">${fmtNum(e.analisados)}</td><td class="num">${seloPct(e.taxaAnalisados)}</td><td class="num">${fmtNum(e.londres)}</td></tr>`).join('')}
-        <tr class="linha-total"><td>Consolidado</td><td class="num">${fmtNum(rel.total)}</td><td class="num">${fmtNum(rel.analisados)}</td><td class="num">${seloPct(rel.taxaAnalisados)}</td><td class="num">${fmtNum(rel.londres)}</td></tr></tbody></table></div>` : '';
-      const graficos = `<section class="doc-graficos">
+      return `<section class="doc-graficos">
           ${temEvol ? caixaGraficoCRO('Taxa de avaliação de óbitos (1ª análise)', svgLinhaCRO(serieAval, rel.metaInstitucional, 'META ' + String(rel.metaInstitucional).replace('.', ',') + '%'), true) : ''}
           ${temEvol ? caixaGraficoCRO('Taxa de óbitos "a esclarecer" (Protocolo de Londres)', svgLinhaCRO(serieLon, null), true) : ''}
         </section>`;
-      return { graficos, tabela };
+    }
+
+    // Tabela de evolução da CRO para um subconjunto de períodos (chunk). O
+    // Consolidado (totais do recorte inteiro) só entra na última parte.
+    function tabelaEvolucaoCRO(linhas, rel, opts) {
+      opts = opts || {};
+      if (!linhas.length) return '';
+      const corpo = linhas.map(e => `<tr><td>${esc(rotuloPeriodo(e.ano, e.mes))}</td><td class="num">${fmtNum(e.total)}</td><td class="num">${fmtNum(e.analisados)}</td><td class="num">${seloPct(e.taxaAnalisados)}</td><td class="num">${fmtNum(e.londres)}</td></tr>`).join('');
+      const total = opts.consolidado === false ? '' : `<tr class="linha-total"><td>Consolidado</td><td class="num">${fmtNum(rel.total)}</td><td class="num">${fmtNum(rel.analisados)}</td><td class="num">${seloPct(rel.taxaAnalisados)}</td><td class="num">${fmtNum(rel.londres)}</td></tr>`;
+      return `<div class="doc-tabela"><table>
+        <thead><tr><th>Período</th><th class="num">Óbitos</th><th class="num">Analisados</th><th class="num">Tx. avaliação</th><th class="num">A esclarecer</th></tr></thead>
+        <tbody>${corpo}${total}</tbody></table></div>`;
     }
 
     function renderDocumentoCRO(rel) {
@@ -1986,22 +2037,46 @@
         </section>
         ${comorbNota}`;
 
-      // Página 4 — texto de indicadores + gráficos de evolução. A tabela de
-      // evolução vai para a página 5 para nenhuma das duas estourar o A4.
-      const evo = indicadorEvolucaoCRO(rel);
+      // Página 4 — texto de indicadores + gráficos de evolução (linhas).
       const pagina4 = `
         ${secaoTexto(3, 'indicadores')}
-        ${evo.graficos}`;
+        ${graficosEvolucaoCRO(rel)}`;
 
-      const pagina5 = `
-        ${evo.tabela}
-        ${secaoTexto(4, 'acoes')}
-        ${secaoTexto(5, 'conclusaoCRO')}
-        <div class="doc-assinaturas">
+      // Tabela de evolução paginada: cabe junto de ações+conclusão até ~12
+      // meses (caso comum); acima disso ganha folhas dedicadas e a última folha
+      // fica com ações+conclusão+assinatura.
+      const evol = rel.evolucao;
+      const E = evol.length;
+      const INLINE_EVO = 12;   // linhas que cabem junto do texto de ações
+      const CONT_EVO = 26;     // linhas por folha dedicada de evolução
+      const assinatura = `<div class="doc-assinaturas">
           <div class="assinatura"><div class="linha-ass">Presidente da Comissão de Revisão de Óbitos</div></div>
         </div>`;
+      const fechamento = `
+        ${secaoTexto(4, 'acoes')}
+        ${secaoTexto(5, 'conclusaoCRO')}
+        ${assinatura}`;
 
-      const corpos = [pagina1, pagina2, pagina3, pagina3b, pagina4, pagina5];
+      const paginasEvo = [];
+      if (E < 2) {
+        // Sem evolução suficiente: tudo numa folha (igual ao caso atual).
+        paginasEvo.push(fechamento);
+      } else if (E <= INLINE_EVO) {
+        // Tabela curta: junto de ações+conclusão, como antes.
+        paginasEvo.push(`${tabelaEvolucaoCRO(evol, rel)}${fechamento}`);
+      } else {
+        // Muitos meses: tabela em folhas dedicadas; fechamento na última folha.
+        const blocos = [];
+        for (let i = 0; i < E; i += CONT_EVO) blocos.push(evol.slice(i, i + CONT_EVO));
+        blocos.forEach((b, bi) => {
+          const ultimo = bi === blocos.length - 1;
+          const parte = `<section class="doc-secao"><div class="doc-secao-cab"><h3>Evolução por período</h3><span class="doc-secao-nota">${E} períodos no recorte · parte ${bi + 1}/${blocos.length}</span></div>${tabelaEvolucaoCRO(b, rel, { consolidado: ultimo })}</section>`;
+          paginasEvo.push(parte);
+        });
+        paginasEvo.push(fechamento);
+      }
+
+      const corpos = [pagina1, pagina2, pagina3, pagina3b, pagina4, ...paginasEvo];
       const total = corpos.length;
       $('documento').innerHTML = corpos.map((c, i) => montarPagina(tokens, i + 1, total, c)).join('');
       ligarTextosEditaveis(tokens, () => tokensAtuaisCRO(agregarCRO(registrosFiltrados())));
