@@ -1,6 +1,6 @@
-# Hospital Reporting Dashboard
+# Clinical Reporting Suite
 
-Repository: `hospital-reporting-dashboard`
+Repository: `clinical-reporting-suite`
 
 ## Overview
 
