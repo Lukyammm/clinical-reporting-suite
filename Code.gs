@@ -1170,6 +1170,7 @@ const RELATORIO_CRO_CABECALHOS = [
   { chave: 'unidadeObito',   termos: ['UNIDADE DO OBITO', 'UNIDADE OBITO'] },
   { chave: 'mes',            termos: ['MES'] },
   { chave: 'ano',            termos: ['ANO'] },
+  { chave: 'status',         termos: ['STATUS'] },
   { chave: 'avaliacao1',     termos: ['1 AVALIACAO CONCLUIDA', 'AVALIACAO CONCLUIDA', 'AVALIACAO REALIZADA', 'AVALIADO'] },
   { chave: 'eventoAdverso',  termos: ['EV ADVERSO', 'EVENTO ADVERSO'] },
   { chave: 'prontuario',     termos: ['PRONT', 'PRONTUARIO'] },
@@ -1459,7 +1460,8 @@ function montarPayloadDadosCRO(forcarRefresh) {
       limparValorCRO(valorCol(row, 'unidadeOrigem')) || 'Não informado',
       limparValorCRO(valorCol(row, 'comorbidades')),
       dias,
-      idadeNum
+      idadeNum,
+      normalizarTexto(valorCol(row, 'status') || row[3]) || ''
     ]);
   }
 
