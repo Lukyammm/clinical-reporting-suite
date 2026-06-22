@@ -29,6 +29,7 @@ const PLANILHAS = {
 };
 const ABA_RELATORIO_CRP = 'BASE_DADOS(NÃOEDITAR)';
 const ABA_RELATORIO_CRO = 'CRO';
+const ABA_CRO_MORTALIDADE_INST = 'TX_MORTALIDADE_INST';
 const FUSO_HORARIO = 'America/Fortaleza';
 const META_INSTITUCIONAL = 80;
 const LOGO_PADRAO = 'https://i.ibb.co/tTGkBCXj/oie-transparent.png';
@@ -1305,6 +1306,65 @@ function configPublicaCRO(cfg) {
   };
 }
 
+function periodoCRODeValor(valor) {
+  if (valor instanceof Date && !isNaN(valor.getTime())) {
+    return {
+      ano: String(valor.getFullYear()),
+      mes: MESES_CANONICOS[valor.getMonth() + 1] || ''
+    };
+  }
+
+  const texto = String(valor == null ? '' : valor).trim();
+  if (!texto) return { ano: '', mes: '' };
+
+  const partes = texto.match(/([A-Za-zÀ-ÿ.çÇ]+|\d{1,2})\D+(\d{2,4})/);
+  if (partes) {
+    const mes = normalizarMes(partes[1]);
+    let ano = String(partes[2] || '').trim();
+    if (ano.length === 2) ano = '20' + ano;
+    return { ano: normalizarAno(ano), mes: mes };
+  }
+
+  const ano = texto.match(/\b(20\d{2}|19\d{2})\b/);
+  return { ano: ano ? ano[1] : '', mes: normalizarMes(texto) };
+}
+
+function obterIndicadoresGerenciadosCRO(ss) {
+  const sh = ss.getSheetByName(ABA_CRO_MORTALIDADE_INST);
+  const resultado = { mortalidadeInstitucional: [], alertas: [] };
+  if (!sh) {
+    resultado.alertas.push(`Aba "${ABA_CRO_MORTALIDADE_INST}" não encontrada para a taxa de mortalidade institucional.`);
+    return resultado;
+  }
+
+  const ultimaLinha = Math.max(sh.getLastRow(), 1);
+  if (ultimaLinha < 2) return resultado;
+
+  // W:Y = período, numerador (óbitos > 24h), denominador (saídas).
+  const values = sh.getRange(1, 23, ultimaLinha, 3).getValues();
+  for (let i = 1; i < values.length; i++) {
+    const row = values[i];
+    const periodoBruto = row[0];
+    const numerador = numeroOuNull(row[1]);
+    const denominador = numeroOuNull(row[2]);
+    const periodo = periodoCRODeValor(periodoBruto);
+
+    if (!String(periodoBruto == null ? '' : periodoBruto).trim() && numerador == null && denominador == null) continue;
+    if (numerador == null && denominador == null) continue;
+
+    resultado.mortalidadeInstitucional.push({
+      periodo: String(periodoBruto == null ? '' : periodoBruto).trim(),
+      ano: periodo.ano || 'Não informado',
+      mes: periodo.mes || 'Não informado',
+      numerador: numerador,
+      denominador: denominador,
+      taxa: denominador ? Number(((Number(numerador || 0) / denominador) * 100).toFixed(1)) : null
+    });
+  }
+
+  return resultado;
+}
+
 function montarPayloadDadosCRO(forcarRefresh) {
   const cfgCRP = obterConfigRel(forcarRefresh === true);
   const cfg = obterConfigRelCRO(forcarRefresh === true, cfgCRP);
@@ -1313,6 +1373,7 @@ function montarPayloadDadosCRO(forcarRefresh) {
   const id = (cfg.planilhaIdCRO && String(cfg.planilhaIdCRO).trim()) || PLANILHAS.relatoriosCRO || cfgCRP.planilhaId || PLANILHAS.relatorios;
   const ss = abrirPlanilhaPorIdCache(id, 'do relatório CRO');
   const sh = obterAbaRelatorioCRO(ss, cfg);
+  const indicadoresGerenciados = obterIndicadoresGerenciadosCRO(ss);
 
   if (!sh) {
     return {
@@ -1321,8 +1382,9 @@ function montarPayloadDadosCRO(forcarRefresh) {
       config: configPublica,
       base: {
         comissao: 'CRO', aba: '', totalRegistros: 0,
-        alertasEstrutura: ['Base da CRO não encontrada. Esperado uma aba como "Distribuição e análises dos Óbitos" ou "CRO".'],
-        registros: []
+        alertasEstrutura: ['Base da CRO não encontrada. Esperado uma aba como "Distribuição e análises dos Óbitos" ou "CRO".'].concat(indicadoresGerenciados.alertas || []),
+        registros: [],
+        indicadoresGerenciados: indicadoresGerenciados
       }
     };
   }
@@ -1409,8 +1471,9 @@ function montarPayloadDadosCRO(forcarRefresh) {
       comissao: 'CRO',
       aba: sh.getName(),
       totalRegistros: registros.length,
-      alertasEstrutura: alertas,
-      registros: registros
+      alertasEstrutura: alertas.concat(indicadoresGerenciados.alertas || []),
+      registros: registros,
+      indicadoresGerenciados: indicadoresGerenciados
     }
   };
 }
