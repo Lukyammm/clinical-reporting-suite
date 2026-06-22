@@ -720,7 +720,7 @@
     // Índices posicionais de cada registro do dataset compacto da CRP (ver Code.gs).
     const R = { ano: 0, mes: 1, status: 2, unidade: 3, eixo: 4, categoria: 5, satisfacao: 6, flags: 7, num: 8, den: 9, res: 10 };
     // Índices posicionais do dataset da CRO (ver montarPayloadDadosCRO no Code.gs).
-    const RC = { ano: 0, mes: 1, unidade: 2, avaliacao: 3, evento: 4, sexo: 5, faixa: 6, macro: 7, origem: 8, comorb: 9, dias: 10, idade: 11 };
+    const RC = { ano: 0, mes: 1, unidade: 2, avaliacao: 3, evento: 4, sexo: 5, faixa: 6, macro: 7, origem: 8, comorb: 9, dias: 10, idade: 11, status: 12 };
 
     const MES_ORDEM = {
       'Janeiro': 1, 'Fevereiro': 2, 'Março': 3, 'Abril': 4, 'Maio': 5, 'Junho': 6,
@@ -1799,7 +1799,7 @@
           evoMap[chave].total++;
           if (an) evoMap[chave].analisados++;
           if (obitoLondres(r[RC.avaliacao])) evoMap[chave].londres++;
-          const cat = categoriaPrimeiraAnalise(r[RC.avaliacao]);
+          const cat = categoriaPrimeiraAnalise(r[RC.status]);
           if (cat && evoMap[chave][cat] != null) evoMap[chave][cat]++;
         }
       });
@@ -1811,8 +1811,8 @@
           justificado: e.justificado, esclarecer: e.esclarecer, oportunidade: e.oportunidade,
           taxaAnalisados: e.total ? Number(((e.analisados / e.total) * 100).toFixed(1)) : null,
           taxaLondres: e.total ? Number(((e.londres / e.total) * 100).toFixed(1)) : null,
-          taxaEsclarecerAvaliados: (e.justificado + e.esclarecer + e.oportunidade)
-            ? Number((((e.justificado + e.oportunidade) / (e.justificado + e.esclarecer + e.oportunidade)) * 100).toFixed(1))
+          taxaEsclarecerAvaliados: e.analisados
+            ? Number(((e.londres / e.analisados) * 100).toFixed(1))
             : null
         }));
 
@@ -1986,7 +1986,7 @@
 
     function svgLinhasMultiplasCRO(series, opcoes) {
       opcoes = opcoes || {};
-      const W = 520, H = 250, mx = 34, mt = 48, mb = 38, mr = 18;
+      const W = 520, H = 224, mx = 34, mt = 38, mb = 34, mr = 18;
       const aw = W - mx - mr, ah = H - mt - mb;
       const pontos = series.reduce((acc, s) => acc.concat((s.dados || []).filter(p => p.valor != null)), []);
       if (!pontos.length) return `<div style="display:grid;place-items:center;height:${H}px;color:var(--suave);font-size:11px">Sem dados no recorte selecionado.</div>`;
@@ -2004,9 +2004,9 @@
         `<text x="${mx - 7}" y="${(y(v) + 4).toFixed(1)}" text-anchor="end" font-size="11" font-weight="600" fill="#8fa0a3">${Math.round(v)}</text>`).join('');
 
       const legenda = series.map((s, i) => {
-        const x0 = mx + i * 152;
-        return `<line x1="${x0}" y1="18" x2="${x0 + 18}" y2="18" stroke="${s.cor}" stroke-width="3"/>` +
-          `<text x="${x0 + 24}" y="22" font-size="10.5" font-weight="800" fill="#33413f">${esc(s.nome)}</text>`;
+        const x0 = mx + i * 138;
+        return `<line x1="${x0}" y1="16" x2="${x0 + 14}" y2="16" stroke="${s.cor}" stroke-width="2.4"/>` +
+          `<text x="${x0 + 19}" y="19" font-size="8.6" font-weight="800" fill="#33413f">${esc(s.nome)}</text>`;
       }).join('');
 
       const linhas = series.map(s => {
@@ -2079,17 +2079,23 @@
       const serieOport = rel.evolucao.map(e => ({ ano: e.ano, mes: e.mes, valor: e.total ? Number(((e.oportunidade / e.total) * 100).toFixed(1)) : null }));
       const temEvol = rel.evolucao.length >= 1;
       const temMort = serieMortalidade.some(e => e.valor != null);
-      return `<section class="doc-graficos">
-          ${temMort ? caixaGraficoCRO('Taxa de mortalidade institucional', svgLinhaCRO(serieMortalidade, null), true) : ''}
-          ${temEvol ? caixaGraficoCRO('Estratificação da primeira análise', svgLinhasMultiplasCRO([
-            { nome: 'JUSTIFICADO/INEVITÁVEL', cor: '#2638ff', dados: serieJust },
+      const graficos = [
+          temMort ? caixaGraficoCRO('Taxa de mortalidade institucional', svgLinhaCRO(serieMortalidade, null), true) : '',
+          temEvol ? caixaGraficoCRO('Estratificação da primeira análise', svgLinhasMultiplasCRO([
+            { nome: 'JUSTIF./INEVITÁVEL', cor: '#2638ff', dados: serieJust },
             { nome: 'A ESCLARECER', cor: '#ef1d1d', dados: serieEsc },
-            { nome: 'JUSTIF. C/ OPORT. MELHORIA', cor: '#f28c00', dados: serieOport }
-          ], { label: 'Estratificação da primeira análise' }), true) : ''}
-          ${temEvol ? caixaGraficoCRO('Taxa de óbitos a esclarecer avaliados', svgLinhaCRO(serieEsclarecerAval, null), true) : ''}
-          ${temEvol ? caixaGraficoCRO('Taxa de avaliação de óbitos (1ª análise)', svgLinhaCRO(serieAval, rel.metaInstitucional, 'META ' + String(rel.metaInstitucional).replace('.', ',') + '%'), true) : ''}
-          ${temEvol ? caixaGraficoCRO('Taxa de óbitos "a esclarecer" (Protocolo de Londres)', svgLinhaCRO(serieLon, null), true) : ''}
-        </section>`;
+            { nome: 'OPORT. MELHORIA', cor: '#f28c00', dados: serieOport }
+          ], { label: 'Estratificação da primeira análise' }), true) : '',
+          temEvol ? caixaGraficoCRO('Taxa de óbitos a esclarecer avaliados', svgLinhaCRO(serieEsclarecerAval, null), true) : '',
+          temEvol ? caixaGraficoCRO('Taxa de avaliação de óbitos (1ª análise)', svgLinhaCRO(serieAval, rel.metaInstitucional, 'META ' + String(rel.metaInstitucional).replace('.', ',') + '%'), true) : '',
+          temEvol ? caixaGraficoCRO('Taxa de óbitos "a esclarecer" (Protocolo de Londres)', svgLinhaCRO(serieLon, null), true) : ''
+        ].filter(Boolean);
+
+      const paginas = [];
+      for (let i = 0; i < graficos.length; i += 2) {
+        paginas.push(`<section class="doc-graficos">${graficos.slice(i, i + 2).join('')}</section>`);
+      }
+      return paginas;
     }
 
     // Tabela de evolução da CRO para um subconjunto de períodos (chunk). O
@@ -2174,9 +2180,10 @@
         ${comorbNota}`;
 
       // Página 4 — texto de indicadores + gráficos de evolução (linhas).
-      const pagina4 = `
-        ${secaoTexto(3, 'indicadores')}
-        ${graficosEvolucaoCRO(rel)}`;
+      const paginasIndicadores = [
+        secaoTexto(3, 'indicadores'),
+        ...graficosEvolucaoCRO(rel)
+      ];
 
       // Tabela de evolução paginada: cabe junto de ações+conclusão até ~12
       // meses (caso comum); acima disso ganha folhas dedicadas e a última folha
@@ -2212,7 +2219,7 @@
         paginasEvo.push(fechamento);
       }
 
-      const corpos = [pagina1, pagina2, pagina3, pagina3b, pagina4, ...paginasEvo];
+      const corpos = [pagina1, pagina2, pagina3, pagina3b, ...paginasIndicadores, ...paginasEvo];
       const total = corpos.length;
       $('documento').innerHTML = corpos.map((c, i) => montarPagina(tokens, i + 1, total, c)).join('');
       ligarTextosEditaveis(tokens, () => tokensAtuaisCRO(agregarCRO(registrosFiltrados())));
