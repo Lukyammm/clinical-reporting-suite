@@ -2029,28 +2029,36 @@
           <article class="doc-metrica"><span>Eventos adversos</span><strong style="color:var(--vermelho)">${fmtNum(rel.eventos)}</strong></article>
         </section>
         ${secaoTexto(1, 'apresentacao')}
-        ${alertasEstruturaDoc()}`;
-
-      const pagina2 = `
         ${secaoTexto(2, 'epidemiologia')}
         <section class="doc-graficos">
-          ${caixaGraficoCRO('Óbitos por unidade', svgBarrasCRO(rel.porUnidade, { total: rel.total }), true)}
           ${caixaGraficoCRO('Sexo', svgBarrasCRO(rel.porSexo, { total: rel.total }))}
           ${caixaGraficoCRO('Faixa etária', svgBarrasCRO(rel.porFaixa, { total: rel.total }))}
-        </section>`;
+        </section>
+        ${alertasEstruturaDoc()}`;
 
-      // Dois gráficos por página: cada barra pode ter até 10–12 categorias;
-      // quatro juntos estouram o A4 quando os dados têm muitas categorias.
-      const pagina3 = `
+      // A página 1 absorve a apresentação, a epidemiologia e os dois gráficos de
+      // altura previsível (Sexo e Faixa etária — categorias fixas), enchendo a
+      // folha em vez de deixar a metade de baixo vazia. Os gráficos cuja altura
+      // cresce com as categorias ficam nas folhas seguintes, no máximo dois por
+      // folha (quatro juntos estouram o A4). O gráfico "Óbitos por unidade" é o
+      // mais alto e só cabe ao lado de um menor, como o de permanência; os dois
+      // gráficos de procedência (macro e unidade de origem) ficam juntos por
+      // afinidade temática, e Comorbidades fecha a seção.
+      const pagina2 = `
         <section class="doc-graficos">
-          ${caixaGraficoCRO('Macrorregião de origem', svgBarrasCRO(rel.porMacro, { total: rel.total }), true)}
+          ${caixaGraficoCRO('Óbitos por unidade', svgBarrasCRO(rel.porUnidade, { total: rel.total }), true)}
           ${caixaGraficoCRO('Tempo de permanência', svgBarrasCRO(rel.permanencia.itens, { total: rel.permanencia.comDado }), true)}
         </section>
         ${permNota}`;
 
+      const pagina3 = `
+        <section class="doc-graficos">
+          ${caixaGraficoCRO('Macrorregião de origem', svgBarrasCRO(rel.porMacro, { total: rel.total }), true)}
+          ${caixaGraficoCRO('Unidade de origem', svgBarrasCRO(rel.porOrigem, { total: rel.total, limite: 10 }), true)}
+        </section>`;
+
       const pagina3b = `
         <section class="doc-graficos">
-          ${caixaGraficoCRO('Unidade de origem', svgBarrasCRO(rel.porOrigem, { total: rel.total, limite: 10 }), true)}
           ${caixaGraficoCRO('Comorbidades mais frequentes', svgBarrasCRO(rel.comorbidades.itens, { total: rel.comorbidades.comRegistro, limite: 12 }), true)}
         </section>
         ${comorbNota}`;
