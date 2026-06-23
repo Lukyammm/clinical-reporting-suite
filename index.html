@@ -378,6 +378,10 @@
     .mini-classif > i { display: block; height: 100%; min-width: 1px; }
     .doc-tabela tr.linha-total td { font-weight: 800; color: var(--tinta); background: #f3f7f6; border-top: 1.5px solid var(--linha); }
     .doc-tabela tr.bim-inicio td { border-top: 2px solid #999 !important; }
+    .texto-status { font-size: 9.5px; font-weight: 500; color: var(--suave); margin-left: 6px; transition: opacity .3s; }
+    .texto-status.salvando { color: #b45309; }
+    .texto-status.salvo { color: #0f766e; }
+    .texto-status.erro-salvar { color: var(--vermelho); }
     .doc-secao-nota { font-size: 10px; font-weight: 600; color: var(--suave); white-space: nowrap; }
     /* ===== Anexo B: heatmap de evolução ===== */
     .tabela-mapa { overflow-x: auto; }
@@ -785,10 +789,49 @@
     FILTROS_CRP.concat(FILTROS_CRO).forEach(f => { state.sel[f.id] = new Set(); });
     CHAVES_TEXTO_TODAS.forEach(k => { state.textos[k] = { manual: false, valor: '' }; });
 
-    // Persistência local das edições manuais: o texto padrão continua na
-    // memória do app; o que o usuário altera é guardado em tempo real no
-    // navegador (debounce curto, sem travar a digitação) e recuperado ao reabrir.
+    // Persistência de textos: salvo no localStorage (rápido, fallback) e na
+    // planilha (autoritativo, compartilhado entre navegadores/PCs).
+    // Ao carregar, textos da planilha sobrepõem o localStorage.
     const TEXTOS_STORE = 'crpRelatorioTextos.v1';
+
+    function rpcTextos(metodo, comissao, arg) {
+      return new Promise((resolve, reject) => {
+        if (window.google && google.script && google.script.run) {
+          const r = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
+          if (metodo === 'salvar') r.salvarTextosPersonalizadosRel(comissao, arg);
+          else if (metodo === 'limpar') r.limparTextosPersonalizadosRel(comissao, arg);
+          return;
+        }
+        reject(new Error('Salvar textos na planilha requer o app publicado no Apps Script.'));
+      });
+    }
+
+    function marcarStatusTexto(chave, status, msg) {
+      const el = document.querySelector(`[data-status-texto="${chave}"]`);
+      if (!el) return;
+      el.className = 'texto-status no-print' + (status ? ' ' + status : '');
+      el.textContent = msg || '';
+      if (status === 'salvo') setTimeout(() => { if (el.textContent === (msg || '')) { el.className = 'texto-status no-print'; el.textContent = ''; } }, 3000);
+    }
+
+    // Cria debounce por chave para salvar no backend apenas a chave editada.
+    const _debounceBackend = {};
+    function agendarSalvarNoBackend(chave) {
+      clearTimeout(_debounceBackend[chave]);
+      _debounceBackend[chave] = setTimeout(async () => {
+        if (!state.textos[chave] || !state.textos[chave].manual) return;
+        marcarStatusTexto(chave, 'salvando', 'Salvando...');
+        try {
+          const payload = {};
+          payload[chave] = state.textos[chave].valor;
+          await rpcTextos('salvar', state.comissao, payload);
+          marcarStatusTexto(chave, 'salvo', 'Salvo na planilha ✓');
+        } catch (_) {
+          marcarStatusTexto(chave, 'erro-salvar', 'Salvo localmente');
+        }
+      }, 3000);
+    }
+
     function salvarTextosLocais() {
       try {
         const dados = {};
@@ -797,6 +840,7 @@
       } catch (e) { /* armazenamento indisponível: segue só em memória */ }
     }
     const salvarTextosLocaisDebounce = debounce(salvarTextosLocais, 250);
+
     function carregarTextosLocais() {
       try {
         const dados = JSON.parse(localStorage.getItem(TEXTOS_STORE) || '{}');
@@ -805,6 +849,18 @@
         });
       } catch (e) { /* ignora dados corrompidos */ }
     }
+
+    function aplicarTextosDoBackend(textosPersonalizados) {
+      if (!textosPersonalizados || typeof textosPersonalizados !== 'object') return;
+      Object.keys(textosPersonalizados).forEach(k => {
+        const v = textosPersonalizados[k];
+        if (typeof v === 'string' && CHAVES_TEXTO_TODAS.indexOf(k) !== -1) {
+          state.textos[k] = { manual: true, valor: v };
+        }
+      });
+      salvarTextosLocais(); // sincroniza localStorage com o que veio da planilha
+    }
+
     carregarTextosLocais();
 
     /* ================= Utilitários ================= */
@@ -1166,6 +1222,7 @@
         <div class="doc-secao-cab">
           <h3>${numero}. ${esc(TITULOS_TEXTO[chave])}</h3>
           <button class="botao-restaurar no-print ${editado ? 'editado' : ''}" type="button" data-restaurar="${chave}" title="Restaurar texto automático desta seção">${editado ? '✎ editado · restaurar' : '↺ automático'}</button>
+          <span class="texto-status no-print" data-status-texto="${chave}"></span>
         </div>
         <div class="doc-texto" contenteditable="true" spellcheck="true" data-texto="${chave}" aria-label="Texto editável: ${esc(TITULOS_TEXTO[chave])}"></div>
       </section>`;
@@ -1717,16 +1774,25 @@
           state.textos[chave] = { manual: true, valor };
           marcarEdicao(chave, true);
           salvarTextosLocaisDebounce();
+          agendarSalvarNoBackend(chave);
         });
       });
       document.querySelectorAll('[data-restaurar]').forEach(btn => {
-        btn.addEventListener('click', () => {
+        btn.addEventListener('click', async () => {
           const chave = btn.dataset.restaurar;
+          clearTimeout(_debounceBackend[chave]);
           state.textos[chave] = { manual: false, valor: '' };
           salvarTextosLocais();
           const div = document.querySelector(`[data-texto="${chave}"]`);
           if (div) div.textContent = textoAtual(chave, recalcTokens());
           marcarEdicao(chave, false);
+          marcarStatusTexto(chave, 'salvando', 'Restaurando...');
+          try {
+            await rpcTextos('limpar', state.comissao, [chave]);
+            marcarStatusTexto(chave, '', '');
+          } catch (_) {
+            marcarStatusTexto(chave, '', '');
+          }
           toast(`Texto de "${TITULOS_TEXTO[chave]}" voltou ao automático.`, 'info', 'Texto');
         });
       });
@@ -2501,6 +2567,7 @@
       FILTROS = filtrosAtuais();
       fecharFiltros();
       state.dados = state.cacheDados[nova] || null;
+      if (state.dados && state.dados.textosPersonalizados) aplicarTextosDoBackend(state.dados.textosPersonalizados);
       // Seletor e textos auxiliares
       document.querySelectorAll('#seletor-comissao .seletor-opcao').forEach(b => {
         const on = b.dataset.comissao === nova;
@@ -2561,6 +2628,7 @@
         }
         state.dados = payload;
         state.cacheDados[comissao] = payload;
+        if (payload.textosPersonalizados) aplicarTextosDoBackend(payload.textosPersonalizados);
         construirFiltros();
         // Limpa seleções que deixaram de existir na base carregada.
         filtrosAtuais().forEach(def => {
@@ -2758,12 +2826,13 @@
         FILTROS.forEach(f => { state.sel[f.id] = new Set(); });
         renderTudo();
       });
-      $('btn-textos-padrao').addEventListener('click', () => {
+      $('btn-textos-padrao').addEventListener('click', async () => {
         const chaves = state.comissao === 'CRO' ? CHAVES_TEXTO_CRO : CHAVES_TEXTO;
         chaves.forEach(k => { state.textos[k] = { manual: false, valor: '' }; });
         salvarTextosLocais();
         renderTudo();
         toast('Textos regenerados com os números do recorte atual.', 'sucesso', 'Texto');
+        try { await rpcTextos('limpar', state.comissao, chaves); } catch (_) {}
       });
       $('opt-anexo').addEventListener('change', ev => {
         state.incluirAnexo = ev.target.checked;

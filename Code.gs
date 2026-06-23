@@ -278,6 +278,7 @@ const CONFIG_REL_CRO_PROP_KEY = 'CRO_REL_CONFIG_V1';
 const CONFIG_REL_CRO_SHEET = 'CRO_REL_CONFIG';
 const CONFIG_REL_CRO_LOG_SHEET = 'CRO_REL_CONFIG_LOG';
 const CONFIG_REL_CRO_CACHE_KEY = 'CRO_REL_CONFIG_CACHE_V1';
+const TEXTOS_REL_SHEET = 'REL_TEXTOS';
 
 const TEXTOS_PADRAO_REL = {
   intro: 'Este relatório apresenta a análise consolidada da comissão {comissao} para o período {periodo}, considerando {setores}. O objetivo é sintetizar o desempenho dos registros avaliados, evidenciar conformidades e não conformidades e apoiar decisões de melhoria contínua.',
@@ -939,6 +940,89 @@ function restaurarConfigRelAdmin() {
   }));
 }
 
+// ── Textos personalizados do relatório salvos na planilha ────────────────
+// A aba REL_TEXTOS tem colunas: Comissão | Chave | Texto | Atualizado em | Por
+// Cada seção editável de cada comissão ocupa uma linha (upsert por chave).
+
+function obterTextosPersonalizadosRel(comissao) {
+  try {
+    const ss = obterPlanilhaConfiguracaoRel(PLANILHAS.relatorios);
+    const sh = ss.getSheetByName(TEXTOS_REL_SHEET);
+    if (!sh || sh.getLastRow() < 2) return {};
+    const dados = sh.getRange(2, 1, sh.getLastRow() - 1, 3).getValues();
+    const comissaoNorm = String(comissao || 'CRP').toUpperCase();
+    const resultado = {};
+    dados.forEach(function(row) {
+      if (String(row[0]).trim().toUpperCase() === comissaoNorm && row[1]) {
+        resultado[String(row[1]).trim()] = String(row[2] == null ? '' : row[2]);
+      }
+    });
+    return resultado;
+  } catch (e) {
+    return {};
+  }
+}
+
+function salvarTextosPersonalizadosRel(comissao, textos) {
+  return executarRota('rpc-textos-salvar', function() {
+    const ss = obterPlanilhaConfiguracaoRel(PLANILHAS.relatorios);
+    let sh = ss.getSheetByName(TEXTOS_REL_SHEET);
+    if (!sh) {
+      sh = ss.insertSheet(TEXTOS_REL_SHEET);
+      sh.getRange('A1:E1').setValues([['Comissão', 'Chave', 'Texto', 'Atualizado em', 'Por']]);
+      sh.setFrozenRows(1);
+      try { sh.setTabColor('#7c3aed'); } catch (_) {}
+    }
+    const comissaoNorm = String(comissao || 'CRP').toUpperCase();
+    const usuario = emailUsuarioAtualRel() || 'anônimo';
+    const carimbo = carimboAgora();
+    const lastRow = sh.getLastRow();
+    const existente = lastRow > 1 ? sh.getRange(2, 1, lastRow - 1, 2).getValues() : [];
+
+    Object.keys(textos || {}).forEach(function(chave) {
+      if (!chave) return;
+      const texto = textos[chave];
+      let linha = -1;
+      for (let i = 0; i < existente.length; i++) {
+        if (String(existente[i][0]).trim().toUpperCase() === comissaoNorm && String(existente[i][1]).trim() === chave) {
+          linha = i + 2;
+          break;
+        }
+      }
+      if (linha > 0) {
+        sh.getRange(linha, 3, 1, 3).setValues([[texto, carimbo, usuario]]);
+      } else {
+        sh.appendRow([comissaoNorm, chave, texto, carimbo, usuario]);
+        existente.push([comissaoNorm, chave]);
+      }
+    });
+    return { success: true };
+  });
+}
+
+function limparTextosPersonalizadosRel(comissao, chaves) {
+  return executarRota('rpc-textos-limpar', function() {
+    const ss = obterPlanilhaConfiguracaoRel(PLANILHAS.relatorios);
+    const sh = ss.getSheetByName(TEXTOS_REL_SHEET);
+    if (!sh || sh.getLastRow() < 2) return { success: true };
+    const comissaoNorm = String(comissao || 'CRP').toUpperCase();
+    const chavesArr = Array.isArray(chaves) ? chaves.map(String) : [String(chaves)];
+    const chavesSet = {};
+    chavesArr.forEach(function(c) { chavesSet[c] = true; });
+    const dados = sh.getRange(2, 1, sh.getLastRow() - 1, 2).getValues();
+    const paraApagar = [];
+    for (let i = 0; i < dados.length; i++) {
+      if (String(dados[i][0]).trim().toUpperCase() === comissaoNorm && chavesSet[String(dados[i][1]).trim()]) {
+        paraApagar.push(i + 2);
+      }
+    }
+    for (let i = paraApagar.length - 1; i >= 0; i--) {
+      sh.deleteRow(paraApagar[i]);
+    }
+    return { success: true };
+  });
+}
+
 function obterConfigRelCRP(forcarRefresh) {
   return obterConfigRelAdmin(forcarRefresh);
 }
@@ -1194,7 +1278,8 @@ function montarPayloadDados(forcarRefresh) {
       registros: registros
     },
     planoAcao: plano.acoes || [],
-    planoAcaoDebug: plano.debug || ''
+    planoAcaoDebug: plano.debug || '',
+    textosPersonalizados: obterTextosPersonalizadosRel('CRP')
   };
 }
 
@@ -1453,7 +1538,8 @@ function montarPayloadDadosCRO(forcarRefresh) {
         alertasEstrutura: ['Base da CRO não encontrada. Esperado uma aba como "Distribuição e análises dos Óbitos" ou "CRO".'].concat(indicadoresGerenciados.alertas || []),
         registros: [],
         indicadoresGerenciados: indicadoresGerenciados
-      }
+      },
+      textosPersonalizados: obterTextosPersonalizadosRel('CRO')
     };
   }
 
@@ -1543,7 +1629,8 @@ function montarPayloadDadosCRO(forcarRefresh) {
       alertasEstrutura: alertas.concat(indicadoresGerenciados.alertas || []),
       registros: registros,
       indicadoresGerenciados: indicadoresGerenciados
-    }
+    },
+    textosPersonalizados: obterTextosPersonalizadosRel('CRO')
   };
 }
 
