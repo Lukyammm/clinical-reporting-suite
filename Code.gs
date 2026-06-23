@@ -1334,7 +1334,7 @@ function normalizarSexoCRO(valor) {
   if (!t) return 'Não informado';
   if (t === 'M' || t.indexOf('MASC') === 0) return 'Masculino';
   if (t === 'F' || t.indexOf('FEM') === 0) return 'Feminino';
-  return limparValorCRO(valor) || 'Não informado';
+  return 'Não informado';
 }
 
 function faixaPorIdadeCRO(idade) {
