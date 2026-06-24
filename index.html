@@ -360,7 +360,7 @@
     .grafico-caixa svg { display: block; width: 100%; height: auto; min-height: 150px; }
     .legenda { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; }
     .legenda span { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; color: var(--suave); }
-    .legenda i { width: 11px; height: 11px; border-radius: 3px; flex: none; }
+    .legenda i { width: 11px; height: 11px; border-radius: 3px; flex: none; box-shadow: 0 0 0 1.5px #fff, 0 0 0 2px rgba(20,40,38,.12); }
 
     .doc-tabela { border: 1px solid var(--linha); border-radius: 9px; overflow: hidden; break-inside: avoid; }
     table { width: 100%; border-collapse: collapse; font-size: 10.3px; }
@@ -2035,7 +2035,7 @@
       });
       const legY0 = Math.max(14, (H - lista.length * 22) / 2);
       const legenda = fatias.map((f, i) =>
-        `<rect x="170" y="${legY0 + i * 22}" width="12" height="12" rx="3" fill="${f.cor}"/>` +
+        `<rect x="170" y="${legY0 + i * 22}" width="12" height="12" rx="3" fill="${f.cor}" stroke="#fff" stroke-width="1.5"/>` +
         `<text x="187" y="${legY0 + i * 22 + 10}" font-size="12.5" fill="#41524f" font-weight="600">${esc(cortar(f.it.rotulo, 18))}</text>` +
         `<text x="330" y="${legY0 + i * 22 + 10}" text-anchor="end" font-size="12" fill="#1a2b2e" font-weight="700">${fmtNum(f.it.valor)}<tspan fill="#7c8d8f" font-weight="600"> · ${f.pct}</tspan></text>`
       ).join('');
@@ -2313,9 +2313,9 @@
       // folha em vez de deixar a metade de baixo vazia. Os gráficos cuja altura
       // cresce com as categorias ficam nas folhas seguintes, no máximo dois por
       // folha (quatro juntos estouram o A4). O gráfico "Óbitos por unidade" é o
-      // mais alto e só cabe ao lado de um menor, como o de permanência; os dois
-      // gráficos de procedência (macro e unidade de origem) ficam juntos por
-      // afinidade temática, e Comorbidades fecha a seção.
+      // mais alto e só cabe ao lado de um menor, como o de permanência; a
+      // unidade de origem (procedência) e as comorbidades fecham a seção
+      // juntas na mesma folha.
       const pagina2 = `
         <section class="doc-graficos">
           ${caixaGraficoCRO('Óbitos por unidade', svgBarrasCRO(rel.porUnidade, { total: rel.total }), true)}
@@ -2326,10 +2326,6 @@
       const pagina3 = `
         <section class="doc-graficos">
           ${caixaGraficoCRO('Unidade de origem', svgBarrasCRO(rel.porOrigem, { total: rel.total, limite: 10 }), true)}
-        </section>`;
-
-      const pagina3b = `
-        <section class="doc-graficos">
           ${caixaGraficoCRO('Comorbidades mais frequentes', svgBarrasCRO(rel.comorbidades.itens, { total: rel.comorbidades.comRegistro, limite: 12 }), true)}
         </section>
         ${comorbNota}`;
@@ -2375,7 +2371,7 @@
         paginasEvo.push(fechamento);
       }
 
-      const corpos = [pagina1, pagina2, pagina3, pagina3b, ...paginasIndicadores, ...paginasEvo];
+      const corpos = [pagina1, pagina2, pagina3, ...paginasIndicadores, ...paginasEvo];
       const total = corpos.length;
       $('documento').innerHTML = corpos.map((c, i) => montarPagina(tokens, i + 1, total, c)).join('');
       ligarTextosEditaveis(tokens, () => tokensAtuaisCRO(agregarCRO(registrosFiltrados())));
