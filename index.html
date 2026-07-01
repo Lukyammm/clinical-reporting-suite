@@ -1874,13 +1874,10 @@
       return t.indexOf('SIM') === 0 || t.indexOf('LONDRES') !== -1 || t.indexOf('CONCLU') !== -1 || t === 'S' ||
         t.indexOf('JUSTIFIC') !== -1 || t.indexOf('INEVIT') !== -1 || t.indexOf('OPORTUN') !== -1 || t.indexOf('MELHORIA') !== -1;
     }
-    function obitoLondres(avaliacao) { return normTxt(avaliacao).indexOf('LONDRES') !== -1; }
-    // Óbito "a esclarecer": olha tanto a 1ª avaliação quanto o status, casando
-    // ESCLARECER ou LONDRES (Protocolo de Londres) em qualquer um dos campos.
+    // Óbito "a esclarecer": só a coluna STATUS da base (== "A ESCLARECER"),
+    // que é o Protocolo de Londres. A avaliação1 não entra nessa definição.
     function obitoEsclarecer(r) {
-      return obitoLondres(r[RC.avaliacao])
-        || categoriaPrimeiraAnalise(r[RC.avaliacao]) === 'esclarecer'
-        || categoriaPrimeiraAnalise(r[RC.status]) === 'esclarecer';
+      return categoriaPrimeiraAnalise(r[RC.status]) === 'esclarecer';
     }
     function categoriaPrimeiraAnalise(avaliacao) {
       const t = normTxt(avaliacao);
@@ -1957,12 +1954,11 @@
       regs.forEach(r => {
         const an = obitoAnalisado(r[RC.avaliacao]);
         if (an) analisados++; else naoAnalisados++;
-        if (obitoLondres(r[RC.avaliacao])) londres++;
-        // "A esclarecer" (status ou avaliação1 indicando Londres/esclarecer):
-        // conta o total e quantos, dentro desse total, já tiveram a 1ª
-        // avaliação concluída — é essa razão que dá a taxa de avaliados.
+        // "A esclarecer" (STATUS == "A ESCLARECER"): conta o total e quantos,
+        // dentro desse total, já tiveram a 1ª avaliação concluída — é essa
+        // razão que dá a taxa de avaliados.
         const esc = obitoEsclarecer(r);
-        if (esc) { esclarecerTotal++; if (an) esclarecerAvaliado++; }
+        if (esc) { londres++; esclarecerTotal++; if (an) esclarecerAvaliado++; }
         // Evento adverso = óbito com notificação qualificada. Conta como evento
         // do indicador só quando o óbito é "a esclarecer"; os demais entram no
         // indicador menor de notificações fora de "a esclarecer".
@@ -1975,8 +1971,7 @@
           if (!evoMap[chave]) evoMap[chave] = { ano, mes, total: 0, analisados: 0, londres: 0, justificado: 0, esclarecer: 0, oportunidade: 0, esclarecerTotal: 0, esclarecerAvaliado: 0 };
           evoMap[chave].total++;
           if (an) evoMap[chave].analisados++;
-          if (obitoLondres(r[RC.avaliacao])) evoMap[chave].londres++;
-          if (esc) { evoMap[chave].esclarecerTotal++; if (an) evoMap[chave].esclarecerAvaliado++; }
+          if (esc) { evoMap[chave].londres++; evoMap[chave].esclarecerTotal++; if (an) evoMap[chave].esclarecerAvaliado++; }
           const cat = categoriaPrimeiraAnalise(r[RC.status]);
           if (cat && evoMap[chave][cat] != null) evoMap[chave][cat]++;
         }
