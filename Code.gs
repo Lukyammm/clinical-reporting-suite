@@ -1181,6 +1181,11 @@ function numeroOuNull(valor) {
   return Number.isNaN(numero) ? null : numero;
 }
 
+// Linhas que são cabeçalho de alguma (mini)tabela da aba, não uma ação real.
+// "NUMERADOR"/"RESULTADO" etc. aparecem em abas como a TX_MORTALIDADE_INST,
+// que empilha a tabela de indicadores ao lado da de plano de ação.
+const PLANO_ACAO_ROTULOS_CABECALHO = ['NUMERADOR', 'DENOMINADOR', 'RESULTADO', 'META', 'INDICADOR', 'PERIODO', 'PERÍODO'];
+
 // Lê uma aba de plano de ação no formato: coluna A = data (funciona como
 // carimbo — linhas sem data herdam o mês/ano da última linha preenchida),
 // coluna I = ação. A coluna do responsável varia por aba, daí o parâmetro.
@@ -1193,6 +1198,10 @@ function lerPlanoDeAcaoDaAba(sh, colResponsavelIdx) {
   let mesAtual = null;
   let anoAtual = null;
   const debugColA = [];
+  // Faixa plausível de ano: descarta números que não são serial de data de
+  // verdade (ex.: um valor solto de outra tabela da aba virando "ano 1905").
+  const anoMin = new Date().getFullYear() - 6;
+  const anoMax = new Date().getFullYear() + 1;
 
   for (let i = 0; i < values.length; i++) {
     const row = values[i];
@@ -1221,16 +1230,24 @@ function lerPlanoDeAcaoDaAba(sh, colResponsavelIdx) {
         }
       }
       if (data && !isNaN(data.getTime())) {
-        mesAtual = data.getMonth() + 1;
-        anoAtual = data.getFullYear();
+        const anoCandidato = data.getFullYear();
+        // Só aceita se o "ano" resultante é plausível — caso contrário o
+        // valor bruto da célula não era mesmo uma data e é melhor manter o
+        // mês/ano vigente (carimbo anterior) do que sujar com lixo.
+        if (anoCandidato >= anoMin && anoCandidato <= anoMax) {
+          mesAtual = data.getMonth() + 1;
+          anoAtual = anoCandidato;
+        }
       }
     }
 
     const acao = String(colI || '').trim();
     const responsavel = String(colResp || '').trim();
     const acaoNorm = acao.toUpperCase().replace(/\s+/g, ' ');
+    const ehCabecalho = acaoNorm.startsWith('AÇÕES') || acaoNorm.startsWith('ACOES') ||
+      PLANO_ACAO_ROTULOS_CABECALHO.indexOf(acaoNorm) !== -1;
 
-    if (acao && !acaoNorm.startsWith('AÇÕES') && !acaoNorm.startsWith('ACOES') && mesAtual && anoAtual) {
+    if (acao && !ehCabecalho && mesAtual && anoAtual) {
       acoes.push({ mes: mesAtual, ano: anoAtual, acao, responsavel });
     }
   }
