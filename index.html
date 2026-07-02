@@ -285,7 +285,7 @@
 
     .doc-cab {
       display: flex;
-      align-items: flex-start;
+      align-items: center;
       justify-content: space-between;
       gap: 16px;
       padding-bottom: 9px;
@@ -294,10 +294,10 @@
     .doc-cab-marca { display: flex; align-items: center; gap: 11px; min-width: 0; }
     /* Só a altura é fixa — a largura fica "auto" pra imagem ocupar a caixa
        inteira no seu próprio formato, sem faixas vazias (o que acontecia ao
-       forçar uma caixa quadrada numa logo que não é quadrada). As margens
-       verticais negativas compensam a altura extra (72 − 16 = 56px de
-       layout), então o cabeçalho e a linha divisória não descem. */
-    .doc-logo { height: 72px; width: auto; max-width: 140px; margin: -8px 0; object-fit: contain; flex: none; }
+       forçar uma caixa quadrada numa logo que não é quadrada). Sem margem
+       negativa: o cabeçalho cresce um pouco para acomodar a logo maior, com
+       respiro real até a linha divisória. */
+    .doc-logo { height: 50px; width: auto; max-width: 140px; object-fit: contain; flex: none; }
     .doc-cab h2 { margin: 0; font-size: 16px; letter-spacing: -.015em; line-height: 1.2; }
     .doc-cab-sub { margin: 2px 0 0; color: var(--suave); font-size: 10.5px; }
     .doc-cab-meta { flex: none; text-align: right; color: var(--suave); font-size: 10px; line-height: 1.5; }
@@ -555,10 +555,18 @@
         width: 210mm;
         min-height: 297mm;
         margin: 0 !important;
+        /* Com @page{margin:0}, o padding-top da folha é a única folga até a
+           borda física — dá um respiro extra pra impressora/gerador de PDF
+           não cortar pixel do cabeçalho na borda superior. */
+        padding-top: 15mm;
         border: 0;
         border-radius: 0;
         box-shadow: none;
       }
+      /* Bordas finas em CSS costumam sair mais grossas na impressão (a
+         renderização arredonda pra cima); força a linha do cabeçalho a
+         ficar mais fina só na impressão, sem mudar a tela. */
+      .doc-cab { border-bottom-width: 1px; }
       .doc-texto { background: none !important; box-shadow: none !important; }
       .botao-restaurar { display: none !important; }
     }
