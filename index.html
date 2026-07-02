@@ -2209,7 +2209,7 @@
 
     function svgLinhasMultiplasCRO(series, opcoes) {
       opcoes = opcoes || {};
-      const W = 520, H = 210, mx = 34, mt = 16, mb = 34, mr = 18;
+      const W = 520, H = 210, mx = 34, mt = 16, mb = 40, mr = 18;
       const aw = W - mx - mr, ah = H - mt - mb;
       const pontos = series.reduce((acc, s) => acc.concat((s.dados || []).filter(p => p.valor != null)), []);
       if (!pontos.length) return `<div style="display:grid;place-items:center;height:${H}px;color:var(--suave);font-size:11px">Sem dados no recorte selecionado.</div>`;
@@ -2253,25 +2253,14 @@
         return polylines + circles + valores;
       }).join('');
 
-      // Rótulos do eixo X com anti-colisão (1º e último sempre; meio só se
-      // não encostar no anterior visível nem no último) — sem isso, recortes
-      // com muitos meses grudam os rótulos ("MaAbr", "Maijun").
-      const labelW = 22, labelGap = 4, xFinal = W - mr;
-      const posicoesMes = base.map((p, i) => {
+      // Rótulos do eixo X: todo mês sempre aparece, sem pular por colisão —
+      // a pedido explícito, igual aos rótulos de valor acima.
+      const xFinal = W - mr;
+      const rotulos = base.map((p, i) => {
         const px = i === 0 ? mx : i === ultimo ? xFinal : x(i);
         const anc = ancora(i);
-        const esq = anc === 'start' ? px : anc === 'end' ? px - labelW : px - labelW / 2;
-        return { px, anc, esq, dir: esq + labelW, mes: String(p.mes || '').slice(0, 3) };
-      });
-      const ultimoPosMes = posicoesMes[posicoesMes.length - 1];
-      let anteriorDirMes = -Infinity;
-      const rotulos = posicoesMes.map((p, i) => {
-        if (i !== 0 && i !== ultimo) {
-          if (p.esq - anteriorDirMes < labelGap) return '';
-          if (ultimoPosMes.esq - p.dir < labelGap) return '';
-        }
-        anteriorDirMes = p.dir;
-        return `<text x="${p.px}" y="${H - 12}" text-anchor="${p.anc}" font-size="11.5" font-weight="700" fill="#5d6f73">${esc(p.mes)}</text>`;
+        const mes = String(p.mes || '').slice(0, 3);
+        return `<text x="${px}" y="${H - 12}" text-anchor="${anc}" font-size="11.5" font-weight="700" fill="#5d6f73">${esc(mes)}</text>`;
       }).join('');
 
       const svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(opcoes.label || 'Series mensais da CRO')}">${grade}${linhas}${rotulos}</svg>`;
