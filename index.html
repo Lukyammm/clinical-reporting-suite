@@ -2413,9 +2413,18 @@
       const assinatura = `<div class="doc-assinaturas">
           <div class="assinatura"><div class="linha-ass">Presidente da Comissão de Revisão de Óbitos</div></div>
         </div>`;
-      const fechamento = `
-        ${secaoTexto(4, 'acoes')}
+      const secaoAcoes = `<section class="doc-secao">
+        <div class="doc-secao-cab">
+          <h3>4. ${esc(TITULOS_TEXTO['acoes'])}</h3>
+          <button class="botao-restaurar no-print ${state.textos['acoes'].manual ? 'editado' : ''}" type="button" data-restaurar="acoes" title="Restaurar texto automático desta seção">${state.textos['acoes'].manual ? '✎ editado · restaurar' : '↺ automático'}</button>
+          <span class="texto-status no-print" data-status-texto="acoes"></span>
+        </div>
+        <div class="doc-texto" contenteditable="true" spellcheck="true" data-texto="acoes" aria-label="Texto editável: ${esc(TITULOS_TEXTO['acoes'])}" style="margin-bottom:0.5rem"></div>
         ${tabelaPlanoAcao(rel.evolucao, state.dados?.planoAcao || [], state.dados?.planoAcaoDebug || '')}
+      </section>`;
+
+      const fechamento = `
+        ${secaoAcoes}
         ${secaoTexto(5, 'conclusaoCRO')}
         ${assinatura}`;
 
