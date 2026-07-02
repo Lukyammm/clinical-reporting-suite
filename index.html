@@ -2514,17 +2514,20 @@
       }
 
       // Conclusão + assinatura: anexadas à última folha disponível no caso
-      // compacto (comportamento anterior); numa folha própria quando ações
-      // já ocupou blocos dedicados.
+      // compacto (comportamento anterior). Quando ações já ocupou blocos
+      // dedicados, a conclusão ganha folha própria em vez de ser colada no
+      // último bloco — colar as duas coisas arriscava estourar a folha A4
+      // (o último bloco já vem com ROWS_CONT_ACOES linhas quase no limite) e
+      // gerar uma "sobra" sem cabeçalho/rodapé, do mesmo jeito que o bug
+      // original desta seção.
       const fechamentoFinal = `${secaoTexto(5, 'conclusaoCRO')}${assinatura}`;
       const paginasFinais = [];
       if (paginasAcoes.length === 1 && paginasEvo.length <= 1) {
         const evoInline = paginasEvo.pop() || '';
         paginasFinais.push(`${evoInline}${paginasAcoes[0]}${fechamentoFinal}`);
       } else {
-        paginasAcoes.forEach((p, i) => {
-          paginasFinais.push(i === paginasAcoes.length - 1 ? `${p}${fechamentoFinal}` : p);
-        });
+        paginasAcoes.forEach(p => paginasFinais.push(p));
+        paginasFinais.push(fechamentoFinal);
       }
 
       const corpos = [pagina1, pagina2, pagina3, ...paginasIndicadores, ...paginasEvo, ...paginasFinais];
