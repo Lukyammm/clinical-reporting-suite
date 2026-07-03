@@ -268,7 +268,7 @@
       width: 210mm;
       min-height: 297mm;
       margin: 0 auto;
-      padding: 13mm 15mm 11mm;
+      padding: 9mm 15mm 11mm;
       background: var(--papel);
       border: 1px solid var(--linha);
       border-radius: 4px;
@@ -288,7 +288,6 @@
       align-items: center;
       justify-content: space-between;
       gap: 16px;
-      margin-top: -2px;
       padding-bottom: 9px;
       border-bottom: 2px solid var(--brand);
     }
@@ -573,7 +572,7 @@
         /* Com @page{margin:0}, o padding-top da folha é a única folga até a
            borda física — dá um respiro extra pra impressora/gerador de PDF
            não cortar pixel do cabeçalho na borda superior. */
-        padding-top: 15mm;
+        padding-top: 11mm;
         border: 0;
         border-radius: 0;
         box-shadow: none;
@@ -1897,21 +1896,18 @@
         });
       }
 
-      // Conclusão + assinatura: coladas na última folha do plano quando ele
-      // coube numa página só (comportamento anterior); ganham folha própria
-      // quando o plano já ocupou blocos dedicados, para não estourar a folha
-      // A4 outra vez colando as duas coisas no último bloco.
+      // Conclusão + assinatura sempre em folha própria — nunca coladas na
+      // última folha do plano. O texto da conclusão é editável e livre (sem
+      // limite de tamanho); colar as duas coisas só "quando o plano coube
+      // numa página" ignorava o tamanho do próprio texto da conclusão e podia
+      // estourar a folha A4 mesmo com uma tabela de plano curta.
       const fechamentoFinal = `${secaoTexto(7, 'conclusao')}
         <div class="doc-assinaturas">
           <div class="assinatura"><div class="linha-ass">Presidente da Comissão de Revisão de Prontuários</div></div>
         </div>`;
       const paginasFinais = [];
-      if (paginasPlano.length === 1) {
-        paginasFinais.push(`${paginasPlano[0]}${fechamentoFinal}`);
-      } else {
-        paginasPlano.forEach(p => paginasFinais.push(p));
-        paginasFinais.push(fechamentoFinal);
-      }
+      paginasPlano.forEach(p => paginasFinais.push(p));
+      paginasFinais.push(fechamentoFinal);
 
       const anexoA = `
         <section class="doc-secao anexo-compacto">
