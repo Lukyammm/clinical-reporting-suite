@@ -1187,17 +1187,31 @@ function numeroOuNull(valor) {
 const PLANO_ACAO_ROTULOS_CABECALHO = ['NUMERADOR', 'DENOMINADOR', 'RESULTADO', 'META', 'INDICADOR', 'PERIODO', 'PERÍODO'];
 
 // Lê uma aba de plano de ação no formato: coluna A = data (funciona como
-// carimbo — linhas sem data herdam o mês/ano da última linha preenchida),
-// coluna I = ação. A coluna do responsável varia por aba, daí o parâmetro.
-function lerPlanoDeAcaoDaAba(sh, colResponsavelIdx) {
+// carimbo — linhas sem data herdam o mês/ano da última linha preenchida).
+// Procura pelos cabeçalhos "AÇÕES" e "RESPONSÁVEL" na primeira linha para
+// achar as colunas (robusto a reorganizações — antes esperava I e L hardcoded).
+function lerPlanoDeAcaoDaAba(sh) {
   const ultimaLinha = Math.max(sh.getLastRow(), 1);
   const totalCols = Math.max(sh.getLastColumn(), 12);
   const values = sh.getRange(1, 1, ultimaLinha, totalCols).getValues();
+
+  // Procura pelas colunas de ação e responsável na primeira linha (cabeçalho).
+  const cabecalho = values[0] || [];
+  let colAcaoIdx = -1, colRespIdx = -1;
+  for (let j = 0; j < cabecalho.length; j++) {
+    const texto = String(cabecalho[j] || '').toUpperCase().trim();
+    if (texto.includes('AÇÃO')) colAcaoIdx = j;
+    if (texto.includes('RESPONSÁVEL') || texto.includes('RESPONSAVEL')) colRespIdx = j;
+  }
+  // Fallback aos valores originais se não achar os cabeçalhos.
+  if (colAcaoIdx === -1) colAcaoIdx = 8; // coluna I original
+  if (colRespIdx === -1) colRespIdx = 11; // coluna L original
 
   const acoes = [];
   let mesAtual = null;
   let anoAtual = null;
   const debugColA = [];
+  const debugCols = `colAcao=${colAcaoIdx} colResp=${colRespIdx}`;
   // Faixa plausível de ano: descarta números que não são serial de data de
   // verdade (ex.: um valor solto de outra tabela da aba virando "ano 1905").
   const anoMin = new Date().getFullYear() - 6;
@@ -1206,8 +1220,8 @@ function lerPlanoDeAcaoDaAba(sh, colResponsavelIdx) {
   for (let i = 0; i < values.length; i++) {
     const row = values[i];
     const colA = row[0];
-    const colI = row.length > 8 ? row[8] : '';
-    const colResp = row.length > colResponsavelIdx ? row[colResponsavelIdx] : '';
+    const colAcao = row.length > colAcaoIdx ? row[colAcaoIdx] : '';
+    const colResp = row.length > colRespIdx ? row[colRespIdx] : '';
 
     if (i < 10) debugColA.push(typeof colA + ':' + String(colA).slice(0, 30));
 
@@ -1241,7 +1255,7 @@ function lerPlanoDeAcaoDaAba(sh, colResponsavelIdx) {
       }
     }
 
-    const acao = String(colI || '').trim();
+    const acao = String(colAcao || '').trim();
     const responsavel = String(colResp || '').trim();
     const acaoNorm = acao.toUpperCase().replace(/\s+/g, ' ');
     const ehCabecalho = acaoNorm.startsWith('AÇÕES') || acaoNorm.startsWith('ACOES') ||
@@ -1252,7 +1266,7 @@ function lerPlanoDeAcaoDaAba(sh, colResponsavelIdx) {
     }
   }
 
-  return { sucesso: true, acoes, debug: 'linhas:' + ultimaLinha + ' | colA[0-9]:' + debugColA.join(' | ') };
+  return { sucesso: true, acoes, debug: 'linhas:' + ultimaLinha + ' | ' + debugCols + ' | colA[0-9]:' + debugColA.join(' | ') };
 }
 
 function obterPlanoDeAcaoDados(ss) {
@@ -1262,15 +1276,15 @@ function obterPlanoDeAcaoDados(ss) {
       const abas = ss.getSheets().map(s => s.getName()).join(', ');
       return { sucesso: false, acoes: [], debug: 'Aba não encontrada. Abas disponíveis: ' + abas };
     }
-    return lerPlanoDeAcaoDaAba(sh, 11); // coluna L
+    return lerPlanoDeAcaoDaAba(sh);
   } catch (e) {
     return { sucesso: false, acoes: [], debug: 'Erro: ' + String(e.message || e) };
   }
 }
 
 // Plano de ação da CRO: mesma lógica da CRP, mas mora na aba
-// TX_MORTALIDADE_INST (não existe aba "Plano de Ação" própria da CRO) e o
-// responsável fica na coluna K em vez de L.
+// TX_MORTALIDADE_INST (não existe aba "Plano de Ação" própria da CRO).
+// O parser agora procura pelos cabeçalhos, então não há diferença de coluna.
 function obterPlanoDeAcaoDadosCRO(ss) {
   try {
     const sh = ss.getSheetByName(ABA_CRO_MORTALIDADE_INST);
@@ -1278,7 +1292,7 @@ function obterPlanoDeAcaoDadosCRO(ss) {
       const abas = ss.getSheets().map(s => s.getName()).join(', ');
       return { sucesso: false, acoes: [], debug: `Aba "${ABA_CRO_MORTALIDADE_INST}" não encontrada. Abas disponíveis: ` + abas };
     }
-    return lerPlanoDeAcaoDaAba(sh, 10); // coluna K
+    return lerPlanoDeAcaoDaAba(sh);
   } catch (e) {
     return { sucesso: false, acoes: [], debug: 'Erro: ' + String(e.message || e) };
   }
