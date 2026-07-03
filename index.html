@@ -2294,24 +2294,14 @@
           `</text>`;
       }).join('');
 
-      // Rótulos do eixo X (dois passes anti-colisão): 1º e último sempre;
-      // intermediários só se não encostarem no anterior visível nem no último.
-      const labelW = 34, gap = 5, xFinal = W - mr;
-      const posicoes = serie.map((e, i) => {
+      // Rótulos do eixo X: todo mês sempre aparece, sem pular por colisão.
+      // Inclinados e com fonte menor pra caberem sem sobrepor, igual ao
+      // gráfico de séries múltiplas.
+      const xFinal = W - mr;
+      const rotulos = serie.map((e, i) => {
         const px = i === 0 ? mx : i === ultimo ? xFinal : x(i);
-        const anc = ancora(i);
-        const esq = anc === 'start' ? px : anc === 'end' ? px - labelW : px - labelW / 2;
-        return { px, anc, esq, dir: esq + labelW, aa: String(e.ano).slice(-2), mes: String(e.mes).slice(0, 3) };
-      });
-      const ultimoPos = posicoes[posicoes.length - 1];
-      let anteriorDir = -Infinity;
-      const rotulos = posicoes.map((p, i) => {
-        if (i !== 0 && i !== ultimo) {
-          if (p.esq - anteriorDir < gap) return '';
-          if (ultimoPos.esq - p.dir < gap) return '';
-        }
-        anteriorDir = p.dir;
-        return `<text x="${p.px}" y="${H - 13}" text-anchor="${p.anc}" font-size="11" font-weight="600" fill="#5d6f73">${esc(p.mes)}/${esc(p.aa)}</text>`;
+        const aa = String(e.ano).slice(-2), mes = String(e.mes).slice(0, 3);
+        return `<text x="${px}" y="${H - 10}" text-anchor="end" font-size="8.5" font-weight="700" fill="#5d6f73" transform="rotate(-35 ${px} ${H - 10})">${esc(mes)}/${esc(aa)}</text>`;
       }).join('');
 
       // Linha de meta com a etiqueta no canto direito, logo abaixo da linha.
