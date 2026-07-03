@@ -1199,13 +1199,13 @@ function lerPlanoDeAcaoDaAba(sh, termoResponsavel) {
     return { sucesso: false, acoes: [], debug: 'Aba vazia' };
   }
 
-  // Detecta cabeçalho procurando por "AÇÕES"/"ACOES" (pode estar em qualquer linha até 20)
+  // Detecta cabeçalho procurando por "AÇÕES"/"ACOES" (pode estar em qualquer linha até 100)
   let idxAcoes = -1;
   let idxResponsavel = -1;
   let linhaHeader = 0;
   const termoResponsavelNorm = normalizarCabecalho(termoResponsavel);
 
-  for (let h = 0; h < Math.min(values.length, 20); h++) {
+  for (let h = 0; h < Math.min(values.length, 100); h++) {
     const row = values[h];
     for (let c = 0; c < row.length; c++) {
       const header = normalizarCabecalho(row[c]);
