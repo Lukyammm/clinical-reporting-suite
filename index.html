@@ -2288,6 +2288,28 @@
       pts.forEach(p => { if (p) atual.push(p); else if (atual.length) { segs.push(atual); atual = []; } });
       if (atual.length) segs.push(atual);
 
+      // Trechos sem dado: faixa cinza bem clara + linha pontilhada + rótulo
+      // sutil "sem dados", só quando a faixa é larga o bastante pro texto caber.
+      const passoX = ultimo > 0 ? aw / ultimo : aw;
+      const lacunas = []; let lacunaIni = null;
+      serie.forEach((e, i) => {
+        if (e.valor == null) { if (lacunaIni == null) lacunaIni = i; }
+        else if (lacunaIni != null) { lacunas.push([lacunaIni, i - 1]); lacunaIni = null; }
+      });
+      if (lacunaIni != null) lacunas.push([lacunaIni, serie.length - 1]);
+      const semDados = lacunas.map(([ini, fim]) => {
+        const x0 = Math.max(mx, x(ini) - passoX / 2);
+        const x1 = Math.min(W - mr, x(fim) + passoX / 2);
+        const meioY = mt + ah / 2;
+        const largura = x1 - x0;
+        const rotulo = largura > 46
+          ? `<text x="${((x0 + x1) / 2).toFixed(1)}" y="${(meioY + 3).toFixed(1)}" text-anchor="middle" font-size="9" font-weight="700" fill="#aab6b8">sem dados</text>`
+          : '';
+        return `<rect x="${x0.toFixed(1)}" y="${mt}" width="${largura.toFixed(1)}" height="${ah}" fill="#8fa0a3" opacity=".08"/>` +
+          `<line x1="${x0.toFixed(1)}" y1="${meioY.toFixed(1)}" x2="${x1.toFixed(1)}" y2="${meioY.toFixed(1)}" stroke="#b8c2c4" stroke-width="1.4" stroke-dasharray="3 3"/>` +
+          rotulo;
+      }).join('');
+
       // Área preenchida sob a linha (gradiente suave) + a própria linha.
       const yBase = y(0).toFixed(1);
       const area = segs.filter(s => s.length > 1).map(s =>
@@ -2350,7 +2372,7 @@
       const defs = `<defs><linearGradient id="${uid}" x1="0" y1="0" x2="0" y2="1">` +
         `<stop offset="0" stop-color="#0f766e" stop-opacity="0.16"/>` +
         `<stop offset="1" stop-color="#0f766e" stop-opacity="0"/></linearGradient></defs>`;
-      return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Evolução mensal do indicador">${defs}${grade}${area}${linha}${linhaMeta}${circulos}${valores}${rotulos}</svg>`;
+      return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Evolução mensal do indicador">${defs}${semDados}${grade}${area}${linha}${linhaMeta}${circulos}${valores}${rotulos}</svg>`;
     }
 
     function svgLinhasMultiplasCRO(series, opcoes) {
