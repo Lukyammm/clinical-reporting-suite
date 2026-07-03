@@ -1621,25 +1621,40 @@
     // maio/25 com maio/26) e devolve os grupos já ordenados, sem montar HTML —
     // isso permite paginar os grupos em blocos que cabem numa folha A4 (ver
     // dividirGruposPlanoAcao) em vez de despejar tudo numa tabela só.
-    function dadosPlanoAcao(periodos, planoAcao, debug) {
+    //
+    // opts.porAno (usado pela CRP): casa as ações apenas pelo ANO presente no
+    // recorte, não pelo bimestre exato. A aba "Plano de Ação" da CRP carimba
+    // cada bloco de ações com um único "MÊS / ANO" (célula mesclada, ex.:
+    // jan./2026), então as ações do ciclo caem todas num bimestre só; exigir
+    // sobreposição de bimestre fazia o plano sumir quando o relatório mostrava
+    // outros meses do mesmo ano. A CRO mantém o casamento estrito por bimestre.
+    function dadosPlanoAcao(periodos, planoAcao, debug, opts) {
+      opts = opts || {};
       if (!planoAcao || !planoAcao.length) {
         const debugMsg = debug ? `<br><small style="color:#888;font-size:10px">debug: ${esc(debug)}</small>` : '';
         return { grupos: [], mensagemVazia: `Plano de ação não disponível.${debugMsg}` };
       }
 
       const bimestresNoRecorte = new Set();
+      const anosNoRecorte = new Set();
       periodos.forEach(p => {
         // p.mes vem como NOME do mês ("Janeiro"); converte para número 1-12.
         const numMes = MES_ORDEM[p.mes] || Number(p.mes);
         const bim = getMesBimestre(numMes);
-        if (bim) bimestresNoRecorte.add(p.ano + '-' + bim);
+        const ano = String(p.ano).trim();
+        anosNoRecorte.add(ano);
+        if (bim) bimestresNoRecorte.add(ano + '-' + bim);
       });
 
       const acoesFiltradasPorBimestre = {};
       planoAcao.forEach(acao => {
         const bim = getMesBimestre(acao.mes);
-        const chave = acao.ano + '-' + bim;
-        if (bim && bimestresNoRecorte.has(chave)) {
+        if (!bim) return;
+        const ano = String(acao.ano).trim();
+        const chave = ano + '-' + bim;
+        // CRP: basta o ano estar no recorte; CRO: exige o bimestre exato.
+        const casa = opts.porAno ? anosNoRecorte.has(ano) : bimestresNoRecorte.has(chave);
+        if (casa) {
           if (!acoesFiltradasPorBimestre[chave]) acoesFiltradasPorBimestre[chave] = [];
           acoesFiltradasPorBimestre[chave].push(acao);
         }
@@ -1706,9 +1721,10 @@
     }
 
     // Usado pela CRP (secaoPlano, recorte tipicamente pequeno): tabela única,
-    // sem paginação dedicada.
+    // sem paginação dedicada. Casa o plano pelo ANO do recorte (porAno) — ver
+    // dadosPlanoAcao.
     function tabelaPlanoAcao(periodos, planoAcao, debug) {
-      const { grupos, mensagemVazia } = dadosPlanoAcao(periodos, planoAcao, debug);
+      const { grupos, mensagemVazia } = dadosPlanoAcao(periodos, planoAcao, debug, { porAno: true });
       if (mensagemVazia) return `<p class="doc-recorte" style="margin:0">${mensagemVazia}</p>`;
       return tabelaPlanoAcaoHtml(grupos);
     }
