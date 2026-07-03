@@ -1735,14 +1735,6 @@
       </table></div>`;
     }
 
-    // Usado pela CRP (secaoPlano, recorte tipicamente pequeno): tabela única,
-    // sem paginação dedicada. Casa o plano pelo ANO do recorte (porAno) — ver
-    // dadosPlanoAcao.
-    function tabelaPlanoAcao(periodos, planoAcao, debug) {
-      const { grupos, mensagemVazia } = dadosPlanoAcao(periodos, planoAcao, debug, { porAno: true });
-      if (mensagemVazia) return `<p class="doc-recorte" style="margin:0">${mensagemVazia}</p>`;
-      return tabelaPlanoAcaoHtml(grupos);
-    }
 
     function renderDocumento(rel) {
       const tokens = tokensAtuais(rel);
@@ -1827,24 +1819,71 @@
         </section>
         ${secaoAusentes(rel, periodos)}`;
 
-      // Página 4 — setores, plano de ação e conclusão.
-      const secaoPlano = `<section class="doc-secao">
-        <div class="doc-secao-cab"><h3>6. Plano de ação recomendado</h3></div>
-        ${tabelaPlanoAcao(periodos, state.dados?.planoAcao || [], state.dados?.planoAcaoDebug || '')}
-        <div class="doc-texto" contenteditable="true" spellcheck="true" data-texto="plano" aria-label="Texto editável: Plano de ação recomendado" style="margin-top:1rem"></div>
-        <button class="botao-restaurar no-print ${state.textos['plano'].manual ? 'editado' : ''}" type="button" data-restaurar="plano" title="Restaurar texto automático desta seção" style="margin-top:0.5rem">${state.textos['plano'].manual ? '✎ editado · restaurar' : '↺ automático'}</button>
-      </section>`;
-
+      // Página 4 — setores com maior oportunidade de melhoria.
       const pagina4 = `
         <section class="doc-secao">
           <div class="doc-secao-cab"><h3>5. Setores com maior oportunidade de melhoria</h3></div>
           ${tabelaSetores(rel, periodos)}
-        </section>
-        ${secaoPlano}
-        ${secaoTexto(7, 'conclusao')}
+        </section>`;
+
+      // Plano de ação: mesma lógica de paginação da CRO (dividirGruposPlanoAcao).
+      // Um recorte com muitos anos/bimestres faz a tabela crescer além de uma
+      // folha A4 e, como ".pagina" nunca corta o conteúdo (min-height, sem
+      // overflow:hidden — ver CSS), o excesso virava folha estourada/em branco
+      // no meio, sem cabeçalho/rodapé do documento e bugado na impressão.
+      const planoAcaoDados = dadosPlanoAcao(periodos, state.dados?.planoAcao || [], state.dados?.planoAcaoDebug || '', { porAno: true });
+      const totalLinhasPlano = planoAcaoDados.grupos.reduce((s, g) => s + g.acoes.length, 0);
+      const ROWS_INLINE_PLANO = 10;  // linhas que cabem junto do texto+conclusão
+      const ROWS_CONT_PLANO = 24;    // linhas por folha dedicada de plano
+      const planoTitulo = '6. Plano de ação recomendado';
+      const botaoPlanoHtml = `<button class="botao-restaurar no-print ${state.textos['plano'].manual ? 'editado' : ''}" type="button" data-restaurar="plano" title="Restaurar texto automático desta seção" style="margin-top:0.5rem">${state.textos['plano'].manual ? '✎ editado · restaurar' : '↺ automático'}</button>`;
+      const textoPlanoHtml = `<div class="doc-texto" contenteditable="true" spellcheck="true" data-texto="plano" aria-label="Texto editável: Plano de ação recomendado" style="margin-top:1rem"></div>`;
+
+      let paginasPlano;
+      if (planoAcaoDados.mensagemVazia) {
+        paginasPlano = [`<section class="doc-secao">
+          <div class="doc-secao-cab"><h3>${planoTitulo}</h3></div>
+          <p class="doc-recorte" style="margin:0">${planoAcaoDados.mensagemVazia}</p>
+          ${textoPlanoHtml}
+          ${botaoPlanoHtml}
+        </section>`];
+      } else if (totalLinhasPlano <= ROWS_INLINE_PLANO) {
+        paginasPlano = [`<section class="doc-secao">
+          <div class="doc-secao-cab"><h3>${planoTitulo}</h3></div>
+          ${tabelaPlanoAcaoHtml(planoAcaoDados.grupos)}
+          ${textoPlanoHtml}
+          ${botaoPlanoHtml}
+        </section>`];
+      } else {
+        const blocosPlano = dividirGruposPlanoAcao(planoAcaoDados.grupos, ROWS_INLINE_PLANO, ROWS_CONT_PLANO);
+        const totalBlocosPlano = blocosPlano.length;
+        paginasPlano = blocosPlano.map((bloco, bi) => {
+          const primeiro = bi === 0;
+          const nota = totalBlocosPlano > 1 ? `<span class="doc-secao-nota">parte ${bi + 1}/${totalBlocosPlano}</span>` : '';
+          return `<section class="doc-secao">
+            <div class="doc-secao-cab"><h3>${planoTitulo}</h3>${nota}</div>
+            ${tabelaPlanoAcaoHtml(bloco)}
+            ${primeiro ? textoPlanoHtml : ''}
+            ${primeiro ? botaoPlanoHtml : ''}
+          </section>`;
+        });
+      }
+
+      // Conclusão + assinatura: coladas na última folha do plano quando ele
+      // coube numa página só (comportamento anterior); ganham folha própria
+      // quando o plano já ocupou blocos dedicados, para não estourar a folha
+      // A4 outra vez colando as duas coisas no último bloco.
+      const fechamentoFinal = `${secaoTexto(7, 'conclusao')}
         <div class="doc-assinaturas">
           <div class="assinatura"><div class="linha-ass">Presidente da Comissão de Revisão de Prontuários</div></div>
         </div>`;
+      const paginasFinais = [];
+      if (paginasPlano.length === 1) {
+        paginasFinais.push(`${paginasPlano[0]}${fechamentoFinal}`);
+      } else {
+        paginasPlano.forEach(p => paginasFinais.push(p));
+        paginasFinais.push(fechamentoFinal);
+      }
 
       const anexoA = `
         <section class="doc-secao anexo-compacto">
@@ -1876,7 +1915,7 @@
 
       // Cada item do array é exatamente uma folha A4; a numeração do rodapé é
       // sequencial e o total acompanha a presença (ou não) dos anexos.
-      const corpos = [pagina1, ...paginasPeriodoExtra, pagina2, pagina3, pagina4];
+      const corpos = [pagina1, ...paginasPeriodoExtra, pagina2, pagina3, pagina4, ...paginasFinais];
       if (state.incluirAnexo) corpos.push(anexoA, ...paginasAnexoB);
       const total = corpos.length;
       $('documento').innerHTML = corpos.map((c, i) => montarPagina(tokens, i + 1, total, c)).join('');
