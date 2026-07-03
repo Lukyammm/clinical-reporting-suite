@@ -2415,7 +2415,7 @@
       const sexoM = rel.porSexo.find(s => s.rotulo === 'Masculino');
       const sexoF = rel.porSexo.find(s => s.rotulo === 'Feminino');
       const comorb = rel.comorbidades.itens.slice(0, 4).map(c => `${c.rotulo} (${fmtNum(c.valor)})`).join('; ') || 'sem comorbidades registradas no recorte';
-      const pctDe = it => it && rel.total ? `${fmtNum(it.valor)} (${fmtPct((it.valor / rel.total) * 100)})` : '0';
+      const pctDe = it => it && rel.total ? `${fmtPct((it.valor / rel.total) * 100)} (${fmtNum(it.valor)})` : '0%';
       return {
         comissao: 'CRO',
         periodo: periodoTextoCRO(),
