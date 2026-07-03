@@ -1107,9 +1107,23 @@
     }
 
     /* ================= Textos narrativos (tokens + edição inline) ================= */
-    function periodoTexto() {
+    // Quando não há filtro de mês/ano (recorte = tudo), em vez do genérico
+    // "todos os meses de todos os anos" mostramos o intervalo real dos dados:
+    // "de {primeiro} a {último}", detectado a partir da evolução mensal já
+    // calculada no relatório.
+    function periodoRangeTexto(evolucao) {
+      const rotulo = e => `${String(e.mes).slice(0, 3)}/${String(e.ano).slice(-2)}`;
+      const pts = (evolucao || []).filter(e => e.ano && e.mes && e.ano !== 'Não informado' && e.mes !== 'Não informado');
+      if (!pts.length) return 'todos os meses de todos os anos';
+      const primeiro = pts[0], ultimo = pts[pts.length - 1];
+      return (primeiro.ano === ultimo.ano && primeiro.mes === ultimo.mes)
+        ? rotulo(primeiro)
+        : `de ${rotulo(primeiro)} a ${rotulo(ultimo)}`;
+    }
+    function periodoTexto(rel) {
       const anos = [...state.sel.anos];
       const meses = [...state.sel.meses].sort((a, b) => (MES_ORDEM[a] || 99) - (MES_ORDEM[b] || 99));
+      if (!anos.length && !meses.length) return periodoRangeTexto(rel && rel.evolucao);
       const txtAnos = anos.length ? anos.sort().join(', ') : 'todos os anos';
       const txtMeses = meses.length ? meses.join(', ') : 'todos os meses';
       return `${txtMeses} de ${txtAnos}`;
@@ -1122,7 +1136,7 @@
       const fortalezas = rel.destaques.slice(0, 3).map(i => `${i.nome} (${fmtPct(i.percentual)})`).join('; ') || 'sem destaques disponíveis';
       return {
         comissao: state.dados.base.comissao || 'CRP',
-        periodo: periodoTexto(),
+        periodo: periodoTexto(rel),
         setores,
         totalAvaliacoes: fmtNum(rel.totalAvaliacoes),
         totalAuditavel: fmtNum(rel.totalAuditavel),
@@ -2396,7 +2410,7 @@
     }
 
     /* ===== Tokens e textos da CRO ===== */
-    function periodoTextoCRO() {
+    function periodoTextoCRO(rel) {
       const anos = [...state.sel.anosCRO];
       const mesesRaw = [...state.sel.mesesCRO];
       // Se há chaves de "ano mes" (quando múltiplos anos selecionados), extrair apenas os meses
@@ -2404,6 +2418,7 @@
         const partes = m.split(' ');
         return partes.length > 1 ? partes[1] : m; // Se contém espaço, pegar a segunda parte (mês)
       }).sort(ordenarMes);
+      if (!anos.length && !meses.length) return periodoRangeTexto(rel && rel.evolucao);
       const txtAnos = anos.length ? anos.sort().join(', ') : 'todos os anos';
       const txtMeses = meses.length ? meses.join(', ') : 'todos os meses';
       return `${txtMeses} de ${txtAnos}`;
@@ -2418,7 +2433,7 @@
       const pctDe = it => it && rel.total ? `${fmtPct((it.valor / rel.total) * 100)} (${fmtNum(it.valor)})` : '0%';
       return {
         comissao: 'CRO',
-        periodo: periodoTextoCRO(),
+        periodo: periodoTextoCRO(rel),
         totalObitos: fmtNum(rel.total),
         analisados: fmtNum(rel.analisados),
         taxaAnalisados: `${fmtPct(rel.taxaAnalisados)} (${fmtNum(rel.analisados)} de ${fmtNum(rel.total)})`,
