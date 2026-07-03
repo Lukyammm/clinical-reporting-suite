@@ -2011,6 +2011,10 @@
     function obitoAnalisado(avaliacao) {
       const t = normTxt(avaliacao);
       if (!t || t === 'NAO' || t === 'NAO INFORMADO' || t.indexOf('NAO ') === 0) return false;
+      // "AGUARDA PROT. LONDRES" significa que o óbito ainda NÃO foi avaliado
+      // (está esperando a 2ª avaliação) — só "LONDRES AVALIADO" (sem "AGUARDA")
+      // conta como avaliado.
+      if (t.indexOf('AGUARDA') !== -1) return false;
       return t.indexOf('SIM') === 0 || t.indexOf('LONDRES') !== -1 || t.indexOf('CONCLU') !== -1 || t === 'S' ||
         t.indexOf('JUSTIFIC') !== -1 || t.indexOf('INEVIT') !== -1 || t.indexOf('OPORTUN') !== -1 || t.indexOf('MELHORIA') !== -1;
     }
@@ -2145,6 +2149,7 @@
       const taxaAnalisados = total ? Number(((analisados / total) * 100).toFixed(1)) : null;
       return {
         total, analisados, naoAnalisados, londres, eventos, eventosForaEsclarecer,
+        esclarecerAvaliado,
         taxaAnalisados, diferencaMeta: taxaAnalisados == null ? null : Number((taxaAnalisados - meta).toFixed(1)),
         taxaLondres: esclarecerTotal ? Number(((esclarecerAvaliado / esclarecerTotal) * 100).toFixed(1)) : null,
         metaInstitucional: meta,
@@ -2408,12 +2413,12 @@
         periodo: periodoTextoCRO(),
         totalObitos: fmtNum(rel.total),
         analisados: fmtNum(rel.analisados),
-        taxaAnalisados: fmtPct(rel.taxaAnalisados),
-        taxaLondres: fmtPct(rel.taxaLondres),
+        taxaAnalisados: `${fmtPct(rel.taxaAnalisados)} (${fmtNum(rel.analisados)} de ${fmtNum(rel.total)})`,
+        taxaLondres: `${fmtPct(rel.taxaLondres)} (${fmtNum(rel.esclarecerAvaliado)} de ${fmtNum(rel.londres)})`,
         londres: fmtNum(rel.londres),
         eventosAdversos: fmtNum(rel.eventos),
         unidadeTop: unidadeTop ? unidadeTop.rotulo : '—',
-        unidadeTopPct: unidadeTop && rel.total ? fmtPct((unidadeTop.valor / rel.total) * 100) : 'N/A',
+        unidadeTopPct: unidadeTop && rel.total ? `${fmtPct((unidadeTop.valor / rel.total) * 100)} (${fmtNum(unidadeTop.valor)})` : 'N/A',
         faixaTop: faixaTop ? faixaTop.rotulo.toLowerCase() : '—',
         macroTop: macroTop ? macroTop.rotulo : '—',
         sexoMasculino: pctDe(sexoM),
