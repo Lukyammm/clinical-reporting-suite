@@ -2225,22 +2225,29 @@
 
     // Linha de evolução de um indicador (0–100%) com linha de meta — mesma
     // identidade visual do gráfico de conformidade da CRP.
-    function svgLinhaCRO(serie, meta, rotuloMeta) {
+    function svgLinhaCRO(serie, meta, rotuloMeta, opcoes) {
+      opcoes = opcoes || {};
       const W = 480, H = 236, mx = 34, mt = 40, mb = 44, mr = 16;
       const aw = W - mx - mr, ah = H - mt - mb;
       const pts0 = serie.filter(p => p.valor != null);
       if (!pts0.length) return `<div style="display:grid;place-items:center;height:${H}px;color:var(--suave);font-size:11px">Sem meses com dados no recorte selecionado.</div>`;
       const uid = 'cro' + Math.random().toString(36).slice(2, 8);
       const ultimo = serie.length - 1;
+      // Escala do eixo Y: fixa em 0–100% por padrão, ou auto-ajustada ao maior
+      // valor da série (+5 acima dele) quando `opcoes.escalaAuto` é usado —
+      // pra séries com valores baixos (ex.: mortalidade) não ficarem
+      // espremidas na base do gráfico.
+      const maiorValor = Math.max(...pts0.map(p => p.valor));
+      const maxValor = opcoes.escalaAuto ? Math.max(5, Math.ceil(maiorValor + 5)) : 100;
       const x = i => serie.length === 1 ? mx + aw / 2 : mx + (aw * i) / ultimo;
-      const y = v => mt + ah - (ah * Math.max(0, Math.min(100, v))) / 100;
+      const y = v => mt + ah - (ah * Math.max(0, Math.min(maxValor, v))) / maxValor;
       const fmtRot = v => String(v).replace('.', ',');
       const ancora = i => i === 0 ? 'start' : i === ultimo ? 'end' : 'middle';
 
-      // Grade horizontal + escala do eixo Y (0–100%).
-      const grade = [0, 25, 50, 75, 100].map(v =>
+      // Grade horizontal + escala do eixo Y.
+      const grade = [0, maxValor * .25, maxValor * .5, maxValor * .75, maxValor].map(v =>
         `<line x1="${mx}" y1="${y(v).toFixed(1)}" x2="${W - mr}" y2="${y(v).toFixed(1)}" stroke="${v === 0 ? '#d3dddb' : '#eef3f2'}" stroke-width="1"/>` +
-        `<text x="${mx - 7}" y="${(y(v) + 4).toFixed(1)}" text-anchor="end" font-size="11" font-weight="600" fill="#a7b6b8">${v}</text>`).join('');
+        `<text x="${mx - 7}" y="${(y(v) + 4).toFixed(1)}" text-anchor="end" font-size="11" font-weight="600" fill="#a7b6b8">${Math.round(v)}</text>`).join('');
 
       // Pontos e segmentos contínuos (quebrados onde não há dado).
       const pts = serie.map((e, i) => e.valor == null ? null : [+x(i).toFixed(1), +y(e.valor).toFixed(1)]);
@@ -2370,13 +2377,13 @@
       }).join('');
 
       // Rótulos do eixo X: todo mês sempre aparece, sem pular por colisão —
-      // a pedido explícito, igual aos rótulos de valor acima.
+      // a pedido explícito, igual aos rótulos de valor acima. Inclinados e
+      // com fonte menor pra caberem sem sobrepor em recortes com muitos meses.
       const xFinal = W - mr;
       const rotulos = base.map((p, i) => {
         const px = i === 0 ? mx : i === ultimo ? xFinal : x(i);
-        const anc = ancora(i);
         const mes = String(p.mes || '').slice(0, 3);
-        return `<text x="${px}" y="${H - 12}" text-anchor="${anc}" font-size="11.5" font-weight="700" fill="#5d6f73">${esc(mes)}</text>`;
+        return `<text x="${px}" y="${H - 10}" text-anchor="end" font-size="8.5" font-weight="700" fill="#5d6f73" transform="rotate(-35 ${px} ${H - 10})">${esc(mes)}</text>`;
       }).join('');
 
       const svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(opcoes.label || 'Series mensais da CRO')}">${grade}${linhas}${rotulos}</svg>`;
@@ -2442,7 +2449,7 @@
       const temEvol = rel.evolucao.length >= 1;
       const temMort = serieMortalidade.some(e => e.valor != null);
       const graficos = [
-          temMort ? caixaGraficoCRO('Taxa de mortalidade institucional', svgLinhaCRO(serieMortalidade, null), true) : '',
+          temMort ? caixaGraficoCRO('Taxa de mortalidade institucional', svgLinhaCRO(serieMortalidade, null, null, { escalaAuto: true }), true) : '',
           temEvol ? caixaGraficoCRO('Estratificação da primeira análise', svgLinhasMultiplasCRO([
             { nome: 'Justificado / inevitável', cor: '#2563eb', dados: serieJust },
             { nome: 'A esclarecer', cor: '#dc2626', dados: serieEsc },
