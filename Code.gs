@@ -1187,79 +1187,36 @@ function numeroOuNull(valor) {
 const PLANO_ACAO_ROTULOS_CABECALHO = ['NUMERADOR', 'DENOMINADOR', 'RESULTADO', 'META', 'INDICADOR', 'PERIODO', 'PERÍODO'];
 
 // Lê uma aba de plano de ação no formato: coluna A = data (funciona como
-// carimbo — linhas sem data herdam o mês/ano da última linha preenchida).
-// Procura dinamicamente pelas colunas "AÇÕES"/"ACOES" e responsável por NOME
-// (tolerante a mesclagens e reordenação): a aba "Plano de Ação" da CRP tem
-// células mescladas, então as colunas não ficam em índices fixos — casar por
-// posição fixa (col I / col L) fazia o plano sumir. Ver histórico do bug.
-function lerPlanoDeAcaoDaAba(sh, termoResponsavel) {
+// carimbo — linhas sem data herdam o mês/ano da última linha preenchida),
+// coluna I = ação, e o responsável numa coluna fixa que varia por aba (col L
+// na CRP, col K na CRO), daí o parâmetro colResponsavelIdx.
+//
+// IMPORTANTE: a leitura é por POSIÇÃO FIXA de propósito. Já tentamos detectar
+// as colunas procurando o cabeçalho "AÇÕES" pelo texto, mas a aba tem outras
+// tabelas com cabeçalhos parecidos (ex.: "PROPORÇÃO DE AÇÕES...") e a busca
+// casava a coluna errada (índice 20), deixando o plano vazio. A ação sempre
+// mora na coluna I; não troque isto por busca textual.
+function lerPlanoDeAcaoDaAba(sh, colResponsavelIdx) {
   const ultimaLinha = Math.max(sh.getLastRow(), 1);
   const totalCols = Math.max(sh.getLastColumn(), 12);
   const values = sh.getRange(1, 1, ultimaLinha, totalCols).getValues();
 
-  if (!values || values.length < 1) {
-    return { sucesso: false, acoes: [], debug: 'Aba vazia' };
-  }
-
-  // Detecta cabeçalho procurando por "AÇÕES"/"ACOES" (pode estar em qualquer linha até 100)
-  let idxAcoes = -1;
-  let idxResponsavel = -1;
-  let linhaHeader = 0;
-  const termoResponsavelNorm = normalizarCabecalho(termoResponsavel);
-
-  for (let h = 0; h < Math.min(values.length, 100); h++) {
-    const row = values[h];
-
-    // Primeira passada: procura AÇÕES
-    for (let c = 0; c < row.length; c++) {
-      const header = normalizarCabecalho(row[c]);
-      if (!header) continue;
-
-      if (idxAcoes === -1 && (
-        header.indexOf('ACOES') !== -1 ||
-        header.indexOf('ACAO') !== -1 ||
-        header === 'AÇÕES' ||
-        header === 'AÇÃO'
-      )) {
-        idxAcoes = c;
-        linhaHeader = h;
-      }
-    }
-
-    // Se encontrou AÇÕES, faz segunda passada na mesma linha para encontrar RESPONSÁVEL
-    if (idxAcoes !== -1 && idxResponsavel === -1) {
-      for (let c = 0; c < row.length; c++) {
-        const header = normalizarCabecalho(row[c]);
-        if (!header) continue;
-        if (header.indexOf(termoResponsavelNorm) !== -1 || header.indexOf('RESPONSAVEL') !== -1) {
-          idxResponsavel = c;
-          break;
-        }
-      }
-      break;
-    }
-  }
-
-  if (idxAcoes === -1) {
-    const headerStr = values.slice(0, Math.min(5, values.length))
-      .map((r, rowIdx) => `L${rowIdx}: ` + r.map((h, i) => `${i}:${String(h).slice(0, 15)}`).join(' | '))
-      .join('\n');
-    return { sucesso: false, acoes: [], debug: `Coluna "AÇÕES" não encontrada. Headers: ${headerStr}` };
-  }
-
   const acoes = [];
   let mesAtual = null;
   let anoAtual = null;
+  const debugColA = [];
   // Faixa plausível de ano: descarta números que não são serial de data de
   // verdade (ex.: um valor solto de outra tabela da aba virando "ano 1905").
   const anoMin = new Date().getFullYear() - 6;
   const anoMax = new Date().getFullYear() + 1;
 
-  for (let i = linhaHeader + 1; i < values.length; i++) {
+  for (let i = 0; i < values.length; i++) {
     const row = values[i];
     const colA = row[0];
-    const colAcoes = row.length > idxAcoes ? row[idxAcoes] : '';
-    const colResp = idxResponsavel >= 0 && row.length > idxResponsavel ? row[idxResponsavel] : '';
+    const colAcoes = row.length > 8 ? row[8] : '';           // coluna I = ação
+    const colResp = row.length > colResponsavelIdx ? row[colResponsavelIdx] : '';
+
+    if (i < 10) debugColA.push(typeof colA + ':' + String(colA).slice(0, 30));
 
     if (colA) {
       let data = null;
@@ -1303,7 +1260,7 @@ function lerPlanoDeAcaoDaAba(sh, termoResponsavel) {
   }
 
   const debugAcoes = acoes.length > 0 ? `${acoes.length} ações lidas` : 'nenhuma ação lida (verifique datas)';
-  return { sucesso: true, acoes, debug: `linhas:${ultimaLinha} | header:${linhaHeader} | idxAcoes:${idxAcoes} | idxResp:${idxResponsavel} | ${debugAcoes}` };
+  return { sucesso: true, acoes, debug: `linhas:${ultimaLinha} | colResp:${colResponsavelIdx} | colA[0-9]:${debugColA.join(' | ')} | ${debugAcoes}` };
 }
 
 function obterPlanoDeAcaoDados(ss) {
@@ -1313,7 +1270,7 @@ function obterPlanoDeAcaoDados(ss) {
       const abas = ss.getSheets().map(s => s.getName()).join(', ');
       return { sucesso: false, acoes: [], debug: 'Aba não encontrada. Abas disponíveis: ' + abas };
     }
-    return lerPlanoDeAcaoDaAba(sh, 'RESPONSÁVEL');
+    return lerPlanoDeAcaoDaAba(sh, 11); // coluna L
   } catch (e) {
     return { sucesso: false, acoes: [], debug: 'Erro: ' + String(e.message || e) };
   }
@@ -1328,7 +1285,7 @@ function obterPlanoDeAcaoDadosCRO(ss) {
       const abas = ss.getSheets().map(s => s.getName()).join(', ');
       return { sucesso: false, acoes: [], debug: `Aba "${ABA_CRO_MORTALIDADE_INST}" não encontrada. Abas disponíveis: ` + abas };
     }
-    return lerPlanoDeAcaoDaAba(sh, 'RESPONSAVEL');
+    return lerPlanoDeAcaoDaAba(sh, 10); // coluna K
   } catch (e) {
     return { sucesso: false, acoes: [], debug: 'Erro: ' + String(e.message || e) };
   }
