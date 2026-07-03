@@ -2269,33 +2269,22 @@
       }
 
       // Rótulos de valor: junto ao próprio ponto (acima por padrão; abaixo
-      // quando o ponto encosta no topo), com supressão por colisão horizontal
-      // (1º e último preservados, checando os dois lados — igual aos rótulos
-      // do eixo X — pra não colar no valor seguinte nem no último) e desvio
-      // da etiqueta da meta.
-      const mostraValores = serie.length <= 24;
-      const valW = 26, valGap = 3;
-      const ultimoTemValor = pts[ultimo] != null;
-      const ultimoEsqVal = ultimoTemValor ? (() => {
-        const ancUlt = ancora(ultimo), pxUlt = pts[ultimo][0];
-        return ancUlt === 'start' ? pxUlt : ancUlt === 'end' ? pxUlt - valW : pxUlt - valW / 2;
-      })() : Infinity;
-      let valDir = -Infinity;
+      // quando o ponto encosta no topo). Número e "%" em duas linhas (via
+      // tspan) para ocupar menos largura — todos os pontos exibem valor,
+      // sem supressão por colisão, e desviam da etiqueta da meta.
+      const mostraValores = true;
       const valores = !mostraValores ? '' : serie.map((e, i) => {
         if (e.valor == null) return '';
         const px = pts[i][0], py = pts[i][1], anc = ancora(i);
-        const esq = anc === 'start' ? px : anc === 'end' ? px - valW : px - valW / 2;
-        if (i !== 0 && i !== ultimo) {
-          if (esq - valDir < valGap) return '';
-          if (ultimoTemValor && ultimoEsqVal - (esq + valW) < valGap) return '';
-        }
-        valDir = esq + valW;
-        let vy = py > mt + 14 ? py - 7 : py + 13;
+        let vy = py > mt + 20 ? py - 13 : py + 12;
         // Evita a pílula da meta (que fica logo abaixo da linha tracejada).
-        if (metaGeo && px > metaGeo.pillX - 12 && vy > metaGeo.yMeta + 1 && vy < metaGeo.yMeta + 18) {
-          vy = metaGeo.yMeta - 6;
+        if (metaGeo && px > metaGeo.pillX - 12 && vy > metaGeo.yMeta - 5 && vy < metaGeo.yMeta + 18) {
+          vy = metaGeo.yMeta - 12;
         }
-        return `<text x="${px}" y="${vy.toFixed(1)}" text-anchor="${anc}" font-size="9.5" font-weight="700" fill="#0b5a54" stroke="#fff" stroke-width="2.2" paint-order="stroke">${fmtRot(e.valor)}%</text>`;
+        return `<text x="${px}" y="${vy.toFixed(1)}" text-anchor="${anc}" font-size="7.5" font-weight="700" fill="#0b5a54" stroke="#fff" stroke-width="2" paint-order="stroke">` +
+          `<tspan x="${px}" dy="0">${fmtRot(e.valor)}</tspan>` +
+          `<tspan x="${px}" dy="8">%</tspan>` +
+          `</text>`;
       }).join('');
 
       // Rótulos do eixo X (dois passes anti-colisão): 1º e último sempre;
