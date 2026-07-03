@@ -372,7 +372,7 @@
     .doc-graficos { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; break-inside: avoid; }
     .grafico-caixa { border: 1px solid var(--linha); border-radius: 9px; padding: 10px; background: #fcfdfd; break-inside: avoid; }
     .grafico-caixa h4 { margin: 0 0 6px; font-size: 11px; font-weight: 800; color: var(--suave); text-transform: uppercase; letter-spacing: .06em; }
-    .grafico-caixa svg { display: block; width: 100%; height: auto; min-height: 150px; }
+    .grafico-caixa svg { display: block; width: 100%; height: auto; min-height: 150px; overflow: hidden; }
     .legenda { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; }
     .legenda span { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; color: var(--suave); }
     .legenda i { width: 11px; height: 11px; border-radius: 3px; flex: none; box-shadow: 0 0 0 1.5px #fff, 0 0 0 2px rgba(20,40,38,.12); }
@@ -2297,11 +2297,11 @@
       // Rótulos do eixo X: todo mês sempre aparece, sem pular por colisão.
       // Inclinados e com fonte menor pra caberem sem sobrepor, igual ao
       // gráfico de séries múltiplas.
-      const xFinal = W - mr;
+      const xFinal = W - mr, rotY = H - 20;
       const rotulos = serie.map((e, i) => {
         const px = i === 0 ? mx : i === ultimo ? xFinal : x(i);
         const aa = String(e.ano).slice(-2), mes = String(e.mes).slice(0, 3);
-        return `<text x="${px}" y="${H - 10}" text-anchor="end" font-size="8.5" font-weight="700" fill="#5d6f73" transform="rotate(-35 ${px} ${H - 10})">${esc(mes)}/${esc(aa)}</text>`;
+        return `<text x="${px}" y="${rotY}" text-anchor="end" font-size="8.5" font-weight="700" fill="#5d6f73" transform="rotate(-35 ${px} ${rotY})">${esc(mes)}/${esc(aa)}</text>`;
       }).join('');
 
       // Linha de meta com a etiqueta no canto direito, logo abaixo da linha.
@@ -2369,11 +2369,11 @@
       // Rótulos do eixo X: todo mês sempre aparece, sem pular por colisão —
       // a pedido explícito, igual aos rótulos de valor acima. Inclinados e
       // com fonte menor pra caberem sem sobrepor em recortes com muitos meses.
-      const xFinal = W - mr;
+      const xFinal = W - mr, rotY = H - 16;
       const rotulos = base.map((p, i) => {
         const px = i === 0 ? mx : i === ultimo ? xFinal : x(i);
         const mes = String(p.mes || '').slice(0, 3);
-        return `<text x="${px}" y="${H - 10}" text-anchor="end" font-size="8.5" font-weight="700" fill="#5d6f73" transform="rotate(-35 ${px} ${H - 10})">${esc(mes)}</text>`;
+        return `<text x="${px}" y="${rotY}" text-anchor="end" font-size="8.5" font-weight="700" fill="#5d6f73" transform="rotate(-35 ${px} ${rotY})">${esc(mes)}</text>`;
       }).join('');
 
       const svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(opcoes.label || 'Series mensais da CRO')}">${grade}${linhas}${rotulos}</svg>`;
