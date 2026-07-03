@@ -1759,7 +1759,7 @@ function montarPayloadDadosCRO(forcarRefresh) {
   // ficam no cliente (onde mora a semântica de classificação da CRO).
   const notifica = obterNotificacoesQualificadasCRO(cfg);
 
-  return {
+  const payload = {
     success: true,
     geradoEm: carimboAgora(),
     config: configPublica,
