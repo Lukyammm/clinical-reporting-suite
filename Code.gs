@@ -1187,84 +1187,40 @@ function numeroOuNull(valor) {
 const PLANO_ACAO_ROTULOS_CABECALHO = ['NUMERADOR', 'DENOMINADOR', 'RESULTADO', 'META', 'INDICADOR', 'PERIODO', 'PERÍODO'];
 
 // Lê uma aba de plano de ação no formato: coluna A = data (funciona como
-// carimbo — linhas sem data herdam o mês/ano da última linha preenchida).
-// Procura dinamicamente pelas colunas "AÇÕES"/"ACOES" e responsável por NOME
-// (tolerante a mesclagens e reordenação).
-function lerPlanoDeAcaoDaAba(sh, termoResponsavel) {
+// carimbo — linhas sem data herdam o mês/ano da última linha preenchida),
+// coluna I = ação. A coluna do responsável varia por aba, daí o parâmetro.
+function lerPlanoDeAcaoDaAba(sh, colResponsavelIdx) {
   const ultimaLinha = Math.max(sh.getLastRow(), 1);
   const totalCols = Math.max(sh.getLastColumn(), 12);
   const values = sh.getRange(1, 1, ultimaLinha, totalCols).getValues();
 
-  if (!values || values.length < 1) {
-    return { sucesso: false, acoes: [], debug: 'Aba vazia' };
-  }
-
-  // Detecta cabeçalho procurando por "AÇÕES"/"ACOES" (pode estar em qualquer linha até 100)
-  let idxAcoes = -1;
-  let idxResponsavel = -1;
-  let linhaHeader = 0;
-  const termoResponsavelNorm = normalizarCabecalho(termoResponsavel);
-
-  for (let h = 0; h < Math.min(values.length, 100); h++) {
-    const row = values[h];
-
-    // Primeira passada: procura AÇÕES
-    for (let c = 0; c < row.length; c++) {
-      const header = normalizarCabecalho(row[c]);
-      if (!header) continue;
-
-      if (idxAcoes === -1 && (
-        header.indexOf('ACOES') !== -1 ||
-        header.indexOf('ACAO') !== -1 ||
-        header === 'AÇÕES' ||
-        header === 'AÇÃO'
-      )) {
-        idxAcoes = c;
-        linhaHeader = h;
-      }
-    }
-
-    // Se encontrou AÇÕES, faz segunda passada na mesma linha para encontrar RESPONSÁVEL
-    if (idxAcoes !== -1 && idxResponsavel === -1) {
-      for (let c = 0; c < row.length; c++) {
-        const header = normalizarCabecalho(row[c]);
-        if (!header) continue;
-        if (header.indexOf(termoResponsavelNorm) !== -1 || header.indexOf('RESPONSAVEL') !== -1) {
-          idxResponsavel = c;
-          break;
-        }
-      }
-      break;
-    }
-  }
-
-  if (idxAcoes === -1) {
-    const headerStr = values.slice(0, Math.min(5, values.length))
-      .map((r, rowIdx) => `L${rowIdx}: ` + r.map((h, i) => `${i}:${String(h).slice(0, 15)}`).join(' | '))
-      .join('\n');
-    return { sucesso: false, acoes: [], debug: `Coluna "AÇÕES" não encontrada. Headers: ${headerStr}` };
-  }
-
   const acoes = [];
   let mesAtual = null;
   let anoAtual = null;
+  const debugColA = [];
+  // Faixa plausível de ano: descarta números que não são serial de data de
+  // verdade (ex.: um valor solto de outra tabela da aba virando "ano 1905").
   const anoMin = new Date().getFullYear() - 6;
   const anoMax = new Date().getFullYear() + 1;
 
-  for (let i = linhaHeader + 1; i < values.length; i++) {
+  for (let i = 0; i < values.length; i++) {
     const row = values[i];
     const colA = row[0];
-    const colAcoes = row.length > idxAcoes ? row[idxAcoes] : '';
-    const colResp = idxResponsavel >= 0 && row.length > idxResponsavel ? row[idxResponsavel] : '';
+    const colI = row.length > 8 ? row[8] : '';
+    const colResp = row.length > colResponsavelIdx ? row[colResponsavelIdx] : '';
+
+    if (i < 10) debugColA.push(typeof colA + ':' + String(colA).slice(0, 30));
 
     if (colA) {
       let data = null;
       if (typeof colA === 'object' && colA !== null && typeof colA.getMonth === 'function') {
         data = colA;
       } else if (typeof colA === 'number' && colA > 1) {
+        // número serial do Google Sheets (dias desde 30/12/1899)
         data = new Date((colA - 25569) * 86400000);
       } else {
         const str = String(colA).trim();
+        // DD/MM/AAAA (formato brasileiro): mês é o 2º grupo.
         const br = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
         if (br) {
           mesAtual = Number(br[2]);
@@ -1275,6 +1231,9 @@ function lerPlanoDeAcaoDaAba(sh, termoResponsavel) {
       }
       if (data && !isNaN(data.getTime())) {
         const anoCandidato = data.getFullYear();
+        // Só aceita se o "ano" resultante é plausível — caso contrário o
+        // valor bruto da célula não era mesmo uma data e é melhor manter o
+        // mês/ano vigente (carimbo anterior) do que sujar com lixo.
         if (anoCandidato >= anoMin && anoCandidato <= anoMax) {
           mesAtual = data.getMonth() + 1;
           anoAtual = anoCandidato;
@@ -1282,7 +1241,7 @@ function lerPlanoDeAcaoDaAba(sh, termoResponsavel) {
       }
     }
 
-    const acao = String(colAcoes || '').trim();
+    const acao = String(colI || '').trim();
     const responsavel = String(colResp || '').trim();
     const acaoNorm = acao.toUpperCase().replace(/\s+/g, ' ');
     const ehCabecalho = acaoNorm.startsWith('AÇÕES') || acaoNorm.startsWith('ACOES') ||
@@ -1293,8 +1252,7 @@ function lerPlanoDeAcaoDaAba(sh, termoResponsavel) {
     }
   }
 
-  const debugAcoes = acoes.length > 0 ? `${acoes.length} ações lidas` : 'nenhuma ação lida (verifique datas)';
-  return { sucesso: true, acoes, debug: `linhas:${ultimaLinha} | header:${linhaHeader} | idxAcoes:${idxAcoes} | idxResp:${idxResponsavel} | ${debugAcoes}` };
+  return { sucesso: true, acoes, debug: 'linhas:' + ultimaLinha + ' | colA[0-9]:' + debugColA.join(' | ') };
 }
 
 function obterPlanoDeAcaoDados(ss) {
@@ -1304,14 +1262,15 @@ function obterPlanoDeAcaoDados(ss) {
       const abas = ss.getSheets().map(s => s.getName()).join(', ');
       return { sucesso: false, acoes: [], debug: 'Aba não encontrada. Abas disponíveis: ' + abas };
     }
-    return lerPlanoDeAcaoDaAba(sh, 'RESPONSÁVEL');
+    return lerPlanoDeAcaoDaAba(sh, 11); // coluna L
   } catch (e) {
     return { sucesso: false, acoes: [], debug: 'Erro: ' + String(e.message || e) };
   }
 }
 
 // Plano de ação da CRO: mesma lógica da CRP, mas mora na aba
-// TX_MORTALIDADE_INST (não existe aba "Plano de Ação" própria da CRO).
+// TX_MORTALIDADE_INST (não existe aba "Plano de Ação" própria da CRO) e o
+// responsável fica na coluna K em vez de L.
 function obterPlanoDeAcaoDadosCRO(ss) {
   try {
     const sh = ss.getSheetByName(ABA_CRO_MORTALIDADE_INST);
@@ -1319,7 +1278,7 @@ function obterPlanoDeAcaoDadosCRO(ss) {
       const abas = ss.getSheets().map(s => s.getName()).join(', ');
       return { sucesso: false, acoes: [], debug: `Aba "${ABA_CRO_MORTALIDADE_INST}" não encontrada. Abas disponíveis: ` + abas };
     }
-    return lerPlanoDeAcaoDaAba(sh, 'RESPONSAVEL');
+    return lerPlanoDeAcaoDaAba(sh, 10); // coluna K
   } catch (e) {
     return { sucesso: false, acoes: [], debug: 'Erro: ' + String(e.message || e) };
   }
@@ -1800,7 +1759,7 @@ function montarPayloadDadosCRO(forcarRefresh) {
   // ficam no cliente (onde mora a semântica de classificação da CRO).
   const notifica = obterNotificacoesQualificadasCRO(cfg);
 
-  const payload = {
+  return {
     success: true,
     geradoEm: carimboAgora(),
     config: configPublica,
