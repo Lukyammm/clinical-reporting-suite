@@ -1199,22 +1199,35 @@ function lerPlanoDeAcaoDaAba(sh, termoResponsavel) {
     return { sucesso: false, acoes: [], debug: 'Aba vazia' };
   }
 
-  // Detecta cabeçalho na primeira linha (ou primeiras 5 linhas se houver mesclagens)
+  // Detecta cabeçalho procurando por "AÇÕES"/"ACOES" (pode estar em qualquer linha até 100)
   let idxAcoes = -1;
   let idxResponsavel = -1;
   let linhaHeader = 0;
+  const termoResponsavelNorm = normalizarCabecalho(termoResponsavel);
 
-  for (let h = 0; h < Math.min(values.length, 5); h++) {
+  for (let h = 0; h < Math.min(values.length, 100); h++) {
     const row = values[h];
     for (let c = 0; c < row.length; c++) {
       const header = normalizarCabecalho(row[c]);
-      if (idxAcoes === -1 && (header.indexOf('ACOES') !== -1 || header.indexOf('AÇÃO') !== -1 || header.indexOf('ACÃO') !== -1)) {
+      if (!header) continue;
+
+      // Procura por variações de AÇÕES
+      if (idxAcoes === -1 && (
+        header.indexOf('ACOES') !== -1 ||
+        header.indexOf('ACAO') !== -1 ||
+        header === 'AÇÕES' ||
+        header === 'AÇÃO'
+      )) {
         idxAcoes = c;
       }
-      if (idxResponsavel === -1 && header.indexOf(normalizarCabecalho(termoResponsavel)) !== -1) {
+
+      // Procura pelo termo responsável
+      if (idxResponsavel === -1 && header.indexOf(termoResponsavelNorm) !== -1) {
         idxResponsavel = c;
       }
     }
+
+    // Se encontrou AÇÕES, marca esta como linha de cabeçalho
     if (idxAcoes !== -1) {
       linhaHeader = h;
       break;
@@ -1222,7 +1235,9 @@ function lerPlanoDeAcaoDaAba(sh, termoResponsavel) {
   }
 
   if (idxAcoes === -1) {
-    const headerStr = values[0].map((h, i) => `${i}:${String(h).slice(0, 20)}`).join(' | ');
+    const headerStr = values.slice(0, Math.min(5, values.length))
+      .map((r, rowIdx) => `L${rowIdx}: ` + r.map((h, i) => `${i}:${String(h).slice(0, 15)}`).join(' | '))
+      .join('\n');
     return { sucesso: false, acoes: [], debug: `Coluna "AÇÕES" não encontrada. Headers: ${headerStr}` };
   }
 
