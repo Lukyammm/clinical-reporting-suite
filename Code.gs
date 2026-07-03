@@ -1207,11 +1207,12 @@ function lerPlanoDeAcaoDaAba(sh, termoResponsavel) {
 
   for (let h = 0; h < Math.min(values.length, 100); h++) {
     const row = values[h];
+
+    // Primeira passada: procura AÇÕES
     for (let c = 0; c < row.length; c++) {
       const header = normalizarCabecalho(row[c]);
       if (!header) continue;
 
-      // Procura por variações de AÇÕES
       if (idxAcoes === -1 && (
         header.indexOf('ACOES') !== -1 ||
         header.indexOf('ACAO') !== -1 ||
@@ -1219,17 +1220,20 @@ function lerPlanoDeAcaoDaAba(sh, termoResponsavel) {
         header === 'AÇÃO'
       )) {
         idxAcoes = c;
-      }
-
-      // Procura pelo termo responsável
-      if (idxResponsavel === -1 && header.indexOf(termoResponsavelNorm) !== -1) {
-        idxResponsavel = c;
+        linhaHeader = h;
       }
     }
 
-    // Se encontrou AÇÕES, marca esta como linha de cabeçalho
-    if (idxAcoes !== -1) {
-      linhaHeader = h;
+    // Se encontrou AÇÕES, faz segunda passada na mesma linha para encontrar RESPONSÁVEL
+    if (idxAcoes !== -1 && idxResponsavel === -1) {
+      for (let c = 0; c < row.length; c++) {
+        const header = normalizarCabecalho(row[c]);
+        if (!header) continue;
+        if (header.indexOf(termoResponsavelNorm) !== -1 || header.indexOf('RESPONSAVEL') !== -1) {
+          idxResponsavel = c;
+          break;
+        }
+      }
       break;
     }
   }
@@ -1289,7 +1293,8 @@ function lerPlanoDeAcaoDaAba(sh, termoResponsavel) {
     }
   }
 
-  return { sucesso: true, acoes, debug: `linhas:${ultimaLinha} | idxAcoes:${idxAcoes} | idxResp:${idxResponsavel}` };
+  const debugAcoes = acoes.length > 0 ? `${acoes.length} ações lidas` : 'nenhuma ação lida (verifique datas)';
+  return { sucesso: true, acoes, debug: `linhas:${ultimaLinha} | header:${linhaHeader} | idxAcoes:${idxAcoes} | idxResp:${idxResponsavel} | ${debugAcoes}` };
 }
 
 function obterPlanoDeAcaoDados(ss) {
