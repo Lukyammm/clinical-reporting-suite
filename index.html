@@ -796,6 +796,14 @@
       CRO: { sigla: 'CRO', titulo: 'Relatório Analítico da CRO', nomeLongo: 'Comissão de Revisão de Óbitos' }
     };
     function comissaoInfo() { return COMISSOES[state.comissao] || COMISSOES.CRP; }
+    // Lembra a última comissão vista (CRP/CRO) entre recarregamentos de página.
+    const COMISSAO_STORE = 'crpRelatorioComissao.v1';
+    function comissaoSalva() {
+      try {
+        const v = localStorage.getItem(COMISSAO_STORE);
+        return COMISSOES[v] ? v : 'CRP';
+      } catch (_) { return 'CRP'; }
+    }
 
     const CHAVES_TEXTO = ['intro', 'metodo', 'analise', 'plano', 'conclusao'];
     const CHAVES_TEXTO_CRO = ['apresentacao', 'epidemiologia', 'indicadores', 'acoes', 'conclusaoCRO'];
@@ -807,7 +815,7 @@
     const TIPO_ROTULO = { executivo: 'Relatório executivo', tecnico: 'Relatório técnico', sintese: 'Síntese executiva' };
 
     const state = {
-      comissao: 'CRP',             // CRP | CRO — tema/comissão ativo
+      comissao: comissaoSalva(),   // CRP | CRO — tema/comissão ativo (persiste entre recargas)
       dados: null,                 // payload da comissão ativa
       cacheDados: {},              // comissão → payload já carregado
       sel: {},                     // id do filtro → Set de valores selecionados
@@ -2876,6 +2884,7 @@
       if (nova === state.comissao) return;
       if (!COMISSOES[nova]) return;
       state.comissao = nova;
+      try { localStorage.setItem(COMISSAO_STORE, nova); } catch (_) {}
       FILTROS = filtrosAtuais();
       fecharFiltros();
       state.dados = state.cacheDados[nova] || null;
@@ -3163,6 +3172,24 @@
 
     // Guarda o markup original do resumo da CRP antes de qualquer troca de tema.
     resumoCRPHtml = $('resumo-corpo').innerHTML;
+    // Se a última visita ficou na CRO, restaura a UI (seletor, título, filtros)
+    // pra esse estado antes de carregar — senão a página sempre abriria na CRP.
+    if (state.comissao !== 'CRP') {
+      FILTROS = filtrosAtuais();
+      document.querySelectorAll('#seletor-comissao .seletor-opcao').forEach(b => {
+        const on = b.dataset.comissao === state.comissao;
+        b.classList.toggle('ativo', on);
+        b.setAttribute('aria-selected', on ? 'true' : 'false');
+      });
+      const infoInicial = comissaoInfo();
+      $('topo-titulo').textContent = infoInicial.titulo;
+      document.title = infoInicial.titulo;
+      $('nota-comissao').innerHTML = state.comissao === 'CRO'
+        ? 'Comissão <b>CRO</b> · Revisão de Óbitos (análise dos óbitos e perfil epidemiológico).'
+        : 'Comissão <b>CRP</b> · Revisão de Prontuários (conformidade dos registros).';
+      const optAnexoInicial = $('opt-anexo') && $('opt-anexo').closest('.opcao-doc');
+      if (optAnexoInicial) optAnexoInicial.style.display = state.comissao === 'CRO' ? 'none' : '';
+    }
     construirFiltros();
     ligarEventos();
     iniciar(false);
