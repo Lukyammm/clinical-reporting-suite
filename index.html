@@ -1635,15 +1635,19 @@
         return { grupos: [], mensagemVazia: `Plano de ação não disponível.${debugMsg}` };
       }
 
-      const bimestresNoRecorte = new Set();
-      const anosNoRecorte = new Set();
+      const bimestresNoRecorte = new Set();   // 'ano-bim' — casamento estrito (CRO)
+      const anosNoRecorte = new Set();          // 'ano'
+      const bimSemAnoNoRecorte = new Set();     // 'bim' — casamento por bimestre (pré-CRO)
       periodos.forEach(p => {
         // p.mes vem como NOME do mês ("Janeiro"); converte para número 1-12.
         const numMes = MES_ORDEM[p.mes] || Number(p.mes);
         const bim = getMesBimestre(numMes);
         const ano = String(p.ano).trim();
         anosNoRecorte.add(ano);
-        if (bim) bimestresNoRecorte.add(ano + '-' + bim);
+        if (bim) {
+          bimestresNoRecorte.add(ano + '-' + bim);
+          bimSemAnoNoRecorte.add(String(bim));
+        }
       });
 
       const acoesFiltradasPorBimestre = {};
@@ -1652,8 +1656,14 @@
         if (!bim) return;
         const ano = String(acao.ano).trim();
         const chave = ano + '-' + bim;
-        // CRP: basta o ano estar no recorte; CRO: exige o bimestre exato.
-        const casa = opts.porAno ? anosNoRecorte.has(ano) : bimestresNoRecorte.has(chave);
+        // CRP (porAno): casa se o ANO estiver no recorte OU se o BIMESTRE
+        // estiver no recorte (como fazia a versão pré-CRO). A aba carimba
+        // blocos de ações com um único mês/ano, então nem o ano nem o bimestre
+        // isolados cobrem todos os casos — a união dos dois é que reproduz o
+        // comportamento que sempre funcionou. CRO exige o bimestre exato (ano-bim).
+        const casa = opts.porAno
+          ? (anosNoRecorte.has(ano) || bimSemAnoNoRecorte.has(String(bim)))
+          : bimestresNoRecorte.has(chave);
         if (casa) {
           if (!acoesFiltradasPorBimestre[chave]) acoesFiltradasPorBimestre[chave] = [];
           acoesFiltradasPorBimestre[chave].push(acao);
@@ -1667,7 +1677,12 @@
       });
 
       if (!bimestresOrdenados.length) {
-        return { grupos: [], mensagemVazia: 'Nenhuma ação planejada nos períodos selecionados.' };
+        // Instrumentação: mostra o que o recorte tem vs. o que as ações trazem,
+        // para diagnosticar rapidamente um eventual descasamento de ano/bimestre.
+        const anosAcoes = [...new Set(planoAcao.map(a => String(a.ano).trim()))].join(',');
+        const bimAcoes = [...new Set(planoAcao.map(a => getMesBimestre(a.mes)).filter(Boolean))].join(',');
+        const dbg = `recorte anos:[${[...anosNoRecorte].join(',')}] bim:[${[...bimSemAnoNoRecorte].join(',')}] · ações anos:[${anosAcoes}] bim:[${bimAcoes}]`;
+        return { grupos: [], mensagemVazia: `Nenhuma ação planejada nos períodos selecionados.<br><small style="color:#888;font-size:10px">debug: ${esc(dbg)}</small>` };
       }
 
       const grupos = bimestresOrdenados.map(chave => {
