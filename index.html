@@ -288,6 +288,7 @@
       align-items: center;
       justify-content: space-between;
       gap: 16px;
+      margin-top: -2px;
       padding-bottom: 9px;
       border-bottom: 2px solid var(--brand);
     }
@@ -338,6 +339,11 @@
     .lista-parciais strong { color: var(--tinta); font-weight: 700; }
 
     .doc-secao { break-inside: avoid; }
+    /* Parágrafos de texto livre (editáveis) não têm tamanho previsível — se o
+       usuário escrever muito, a seção pode ficar mais alta que uma folha A4.
+       "avoid" nesse caso força o navegador a simplesmente estourar a página
+       em vez de paginar; deixamos essas seções quebrarem entre páginas. */
+    .doc-secao-texto { break-inside: auto; }
     .doc-secao-cab { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 5px; }
     .doc-secao h3 { margin: 0; font-size: 13px; font-weight: 800; letter-spacing: -.01em; }
     .doc-texto {
@@ -1287,7 +1293,7 @@
 
     function secaoTexto(numero, chave) {
       const editado = state.textos[chave].manual;
-      return `<section class="doc-secao">
+      return `<section class="doc-secao doc-secao-texto">
         <div class="doc-secao-cab">
           <h3>${numero}. ${esc(TITULOS_TEXTO[chave])}</h3>
           <button class="botao-restaurar no-print ${editado ? 'editado' : ''}" type="button" data-restaurar="${chave}" title="Restaurar texto automático desta seção">${editado ? '✎ editado · restaurar' : '↺ automático'}</button>
