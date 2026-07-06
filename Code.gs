@@ -631,6 +631,10 @@ function mesclarConfigRelCRO(padrao, salvo) {
   if (salvo.abaNomeCRO && String(salvo.abaNomeCRO).trim()) cfg.abaNomeCRO = String(salvo.abaNomeCRO).trim();
   if (salvo.logoUrl != null && String(salvo.logoUrl).trim()) cfg.logoUrl = String(salvo.logoUrl).trim();
   if (salvo.rodapeUrl != null && String(salvo.rodapeUrl).trim()) cfg.rodapeUrl = String(salvo.rodapeUrl).trim();
+  if (Array.isArray(salvo.aliasesSetoresCRO)) {
+    const lista = salvo.aliasesSetoresCRO.map(t => String(t || '').trim()).filter(Boolean);
+    if (lista.length) cfg.aliasesSetoresCRO = lista;
+  }
   cfg.atualizadoEm = salvo.atualizadoEm || '';
   cfg.atualizadoPor = salvo.atualizadoPor || '';
   return cfg;
@@ -723,6 +727,7 @@ function lerConfigRelCRODaAba(sh, padrao) {
     abaNomeCRO: mapa['Aba da base CRO'],
     logoUrl: mapa['Logo do cabecalho (URL)'] || mapa['Logo do cabeÃ§alho (URL)'],
     rodapeUrl: mapa['Imagem do rodape (URL)'] || mapa['Imagem do rodapÃ© (URL)'],
+    aliasesSetoresCRO: lerListaConfigRel(mapa['Aliases de setores']),
     atualizadoEm: mapa['Atualizado em'],
     atualizadoPor: mapa['Atualizado por']
   });
@@ -753,6 +758,7 @@ function escreverConfigRelCRONaAba(sh, cfg, observacao) {
     ['Aba da base CRO', cfg.abaNomeCRO || ABA_RELATORIO_CRO],
     ['Logo do cabecalho (URL)', cfg.logoUrl || LOGO_PADRAO],
     ['Imagem do rodape (URL)', cfg.rodapeUrl || RODAPE_PADRAO],
+    ['Aliases de setores', (cfg.aliasesSetoresCRO || []).join('\n')],
     ['Atualizado em', cfg.atualizadoEm || ''],
     ['Atualizado por', cfg.atualizadoPor || ''],
     ['Observacao', observacao || 'Configuracao exclusiva do relatorio da CRO.']
@@ -763,6 +769,7 @@ function escreverConfigRelCRONaAba(sh, cfg, observacao) {
   try {
     sh.getRange(3, 2).setNote('ID da planilha que contem a base da CRO.');
     sh.getRange(4, 2).setNote('Nome exato da aba que contem a base da CRO.');
+    sh.getRange(7, 2).setNote('Um mapeamento por linha, formato: Apelido1, Apelido2 = Nome Correto. Ex: UTIP, UTI PEDIATRICA = UTI PEDIÁTRICA');
   } catch (erro) {
     registrarErro('formatar-config-rel-cro', erro);
   }
@@ -851,6 +858,7 @@ function combinarConfigsRelAdmin(cfgCRP, cfgCRO) {
   cfgCRO = cfgCRO || configPadraoRelCRO();
   combinado.planilhaIdCRO = cfgCRO.planilhaIdCRO || PLANILHAS.relatoriosCRO;
   combinado.abaNomeCRO = cfgCRO.abaNomeCRO || ABA_RELATORIO_CRO;
+  combinado.aliasesSetoresCRO = cfgCRO.aliasesSetoresCRO || [];
   combinado.atualizadoEmCRO = cfgCRO.atualizadoEm || '';
   combinado.atualizadoPorCRO = cfgCRO.atualizadoPor || '';
   return combinado;
@@ -1561,10 +1569,35 @@ function normalizarSexoCRO(valor) {
   return 'Não informado';
 }
 
-function faixaPorIdadeCRO(idade) {
-  if (idade < 20) return '<= 19 ANOS';
-  if (idade >= 100) return '>= 100 ANOS';
-  const dezena = Math.floor(idade / 10) * 10;
+function parseIdadeEmDias(valor) {
+  if (valor == null || String(valor).trim() === '') return null;
+  const num = Number(valor);
+  if (!Number.isNaN(num)) return num * 365;
+
+  const txt = normalizarTexto(valor);
+  let dias = 0;
+  let parsed = false;
+
+  const matchAnos = txt.match(/(\d+)\s*(A|ANO|ANOS)/);
+  if (matchAnos) { dias += Number(matchAnos[1]) * 365; parsed = true; }
+
+  const matchMeses = txt.match(/(\d+)\s*(M|MES|MESES)/);
+  if (matchMeses) { dias += Number(matchMeses[1]) * 30.416; parsed = true; }
+
+  const matchDias = txt.match(/(\d+)\s*(D|DIA|DIAS)/);
+  if (matchDias) { dias += Number(matchDias[1]); parsed = true; }
+
+  return parsed ? dias : null;
+}
+
+function faixaPorIdadeDiasCRO(dias) {
+  if (dias <= 28) return '0 A 28 DIAS';
+  if (dias <= 730) return '29 DIAS A 24 MESES';
+  if (dias <= 19 * 365 + 364) return '> 24 MESES A 19 ANOS';
+
+  const anos = Math.floor(dias / 365);
+  if (anos >= 100) return '>= 100 ANOS';
+  const dezena = Math.floor(anos / 10) * 10;
   return `${dezena} A ${dezena + 9} ANOS`;
 }
 
@@ -1573,8 +1606,8 @@ function faixaPorIdadeCRO(idade) {
 // (data de nascimento vazia); nesse caso classificamos como "Não informado"
 // para não inflar a faixa mais jovem.
 function faixaEtariaCRO(valorIdade, valorFaixa) {
-  const idade = numeroOuNull(limparValorCRO(valorIdade));
-  if (idade != null && idade >= 0 && idade < 130) return faixaPorIdadeCRO(idade);
+  const dias = parseIdadeEmDias(limparValorCRO(valorIdade));
+  if (dias != null && dias >= 0 && dias < 130 * 365) return faixaPorIdadeDiasCRO(dias);
   const faixa = limparValorCRO(valorFaixa);
   if (!faixa) return 'Não informado';
   const norm = normalizarTexto(faixa);
@@ -1658,6 +1691,24 @@ function obterIndicadoresGerenciadosCRO(ss) {
   return resultado;
 }
 
+function aplicarAliasesSetor(nomeSetor, aliasesLista) {
+  if (!nomeSetor) return '';
+  const setorNorm = normalizarTexto(nomeSetor);
+  if (!aliasesLista || !aliasesLista.length) return nomeSetor;
+
+  for (const linha of aliasesLista) {
+    const partes = linha.split('=');
+    if (partes.length === 2) {
+      const corretos = partes[1].trim();
+      const apelidos = partes[0].split(',').map(a => normalizarTexto(a));
+      if (apelidos.includes(setorNorm)) {
+        return corretos;
+      }
+    }
+  }
+  return nomeSetor;
+}
+
 function montarPayloadDadosCRO(forcarRefresh) {
   // Fast path: return cached payload when not forcing a refresh.
   if (!forcarRefresh) {
@@ -1734,7 +1785,10 @@ function montarPayloadDadosCRO(forcarRefresh) {
   for (let r = linhaHeader + 1; r < values.length; r++) {
     const row = values[r];
     const prontuario = limparValorCRO(valorCol(row, 'prontuario'));
-    const unidade = limparValorCRO(valorCol(row, 'unidadeObito'));
+
+    let unidade = limparValorCRO(valorCol(row, 'unidadeObito'));
+    unidade = aplicarAliasesSetor(unidade, cfg.aliasesSetoresCRO);
+
     const mes = normalizarMes(valorCol(row, 'mes'));
     const ano = normalizarAno(limparValorCRO(valorCol(row, 'ano')));
     // Linha é válida se tem ao menos prontuário, unidade ou mês reconhecível.
@@ -1743,6 +1797,11 @@ function montarPayloadDadosCRO(forcarRefresh) {
     const dias = diasEntreDatas(valorCol(row, 'dataInternacao'), valorCol(row, 'dataObito'));
     const idadeNum = numeroOuNull(limparValorCRO(valorCol(row, 'idade')));
 
+    const idadeOriginal = limparValorCRO(valorCol(row, 'idade'));
+
+    let unidadeOrigem = limparValorCRO(valorCol(row, 'unidadeOrigem'));
+    unidadeOrigem = aplicarAliasesSetor(unidadeOrigem, cfg.aliasesSetoresCRO);
+
     registros.push([
       ano || 'Não informado',
       mes || 'Não informado',
@@ -1750,12 +1809,12 @@ function montarPayloadDadosCRO(forcarRefresh) {
       normalizarTexto(valorCol(row, 'avaliacao1')) || 'NÃO INFORMADO',
       normalizarTexto(valorCol(row, 'eventoAdverso')) || '',
       normalizarSexoCRO(valorCol(row, 'sexo')),
-      faixaEtariaCRO(valorCol(row, 'idade'), valorCol(row, 'faixaEtaria')),
+      faixaEtariaCRO(idadeOriginal, valorCol(row, 'faixaEtaria')),
       limparValorCRO(valorCol(row, 'macrorregiao')) || 'Não informado',
-      limparValorCRO(valorCol(row, 'unidadeOrigem')) || 'Não informado',
+      unidadeOrigem || 'Não informado',
       limparValorCRO(valorCol(row, 'comorbidades')),
       dias,
-      idadeNum,
+      idadeOriginal, // Mantendo a string original para preservar a exatidão, já que parseamos em index.html também se precisarmos, ou passamos para parseIdadeEmDias.
       normalizarTexto(valorCol(row, 'status') || row[3]) || '',
       normalizarProntuarioCRO(prontuario)
     ]);
