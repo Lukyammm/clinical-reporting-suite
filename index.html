@@ -100,10 +100,13 @@
       padding: 18px 20px 60px;
       align-items: start;
     }
-    .lateral { display: grid; gap: 14px; position: sticky; top: 72px; }
+    .lateral { display: grid; gap: 14px; position: sticky; top: 72px; max-height: calc(100vh - 80px); overflow-y: auto; padding-right: 4px;}
+    .lateral::-webkit-scrollbar { width: 6px; }
+    .lateral::-webkit-scrollbar-track { background: transparent; }
+    .lateral::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
     @media (max-width: 1080px) {
       .moldura { grid-template-columns: 1fr; }
-      .lateral { position: static; }
+      .lateral { position: static; max-height: none; overflow-y: visible; }
     }
 
     .cartao {
@@ -735,6 +738,13 @@
           </div>
         </section>
         <section class="cartao">
+          <div class="cartao-cab"><h2>Aliases de setores (CRO)</h2></div>
+          <div class="cartao-corpo">
+            <div class="nota-comissao">Mapeamento para corrigir nomes de setores divergentes na base. Formato: `Apelido1, Apelido2 = Nome Correto`. Ex: `UTIP, UTI PEDIATRICA = UTI PEDIÁTRICA`. Um mapeamento por linha.</div>
+            <div class="campo"><label for="adm-aliases-cro">Aliases de setores</label><textarea class="areatexto" id="adm-aliases-cro" rows="3"></textarea></div>
+          </div>
+        </section>
+        <section class="cartao">
           <div class="cartao-cab"><h2>Indicadores da CRP</h2></div>
           <div class="cartao-corpo">
             <div class="nota-comissao">Renomeie mantendo a ordem das colunas da base (L até AN).</div>
@@ -812,7 +822,20 @@
 
     const CHAVES_TEXTO = ['intro', 'metodo', 'analise', 'plano', 'conclusao'];
     const CHAVES_TEXTO_CRO = ['apresentacao', 'epidemiologia', 'indicadores', 'acoes', 'conclusaoCRO'];
-    const CHAVES_TEXTO_TODAS = CHAVES_TEXTO.concat(CHAVES_TEXTO_CRO);
+    const CHAVES_TEXTO_GRAFICOS = [
+      'ev_conf', 'donut_conf', 'mort_inst', 'estrat', 'londres', '1a_analise',
+      'sexo', 'faixa', 'obitos_unidade', 'permanencia', 'origem', 'comorbidades',
+      'permanencia_unidade', 'pendentes_unidade'
+    ];
+    // Create multiple keys per chart: 'graf_title_*', 'graf_pre_*', 'graf_fonte_*'
+    const CHAVES_TEXTO_GRAFICOS_EXPANDIDAS = [];
+    CHAVES_TEXTO_GRAFICOS.forEach(k => {
+      CHAVES_TEXTO_GRAFICOS_EXPANDIDAS.push(`graf_title_${k}`);
+      CHAVES_TEXTO_GRAFICOS_EXPANDIDAS.push(`graf_pre_${k}`);
+      CHAVES_TEXTO_GRAFICOS_EXPANDIDAS.push(`graf_fonte_${k}`);
+    });
+
+    const CHAVES_TEXTO_TODAS = CHAVES_TEXTO.concat(CHAVES_TEXTO_CRO).concat(CHAVES_TEXTO_GRAFICOS_EXPANDIDAS);
     const TITULOS_TEXTO = {
       intro: 'Introdução', metodo: 'Metodologia', analise: 'Análise crítica', plano: 'Plano de ação recomendado', conclusao: 'Conclusão',
       apresentacao: 'Apresentação dos resultados', epidemiologia: 'Perfil epidemiológico', indicadores: 'Indicadores gerenciados', acoes: 'Ações planejadas e desenvolvidas', conclusaoCRO: 'Conclusão'
@@ -1165,10 +1188,13 @@
       return String(template || '').replace(/\{([a-zA-Z0-9_]+)\}/g, (m, chave) => tokens[chave] != null ? tokens[chave] : m);
     }
 
-    function textoAtual(chave, tokens) {
+    function textoAtual(chave, tokens, defaultVal = '') {
       const t = state.textos[chave];
-      if (t.manual) return t.valor;
-      return aplicarTokens(state.dados.config.textosPadrao[chave], tokens);
+      if (t && t.manual) return t.valor;
+      if (state.dados && state.dados.config && state.dados.config.textosPadrao && state.dados.config.textosPadrao[chave] !== undefined) {
+          return aplicarTokens(state.dados.config.textosPadrao[chave], tokens);
+      }
+      return defaultVal;
     }
 
     /* ================= Gráficos SVG (vetoriais, sem bibliotecas) ================= */
@@ -1826,9 +1852,9 @@
         ${secaoTexto(1, 'intro')}
         ${secaoTexto(2, 'metodo')}
         <section class="doc-graficos">
-          <div class="grafico-caixa" style="grid-column: 1 / -1"><h4>Evolução mensal da conformidade</h4>${svgEvolucao(rel.evolucao, rel.metaInstitucional)}</div>
+          ${caixaGraficoEditavel('ev_conf', 'Evolução mensal da conformidade', svgEvolucao(rel.evolucao, rel.metaInstitucional), true)}
           ${periodos.length < 2
-            ? `<div class="grafico-caixa"><h4>Itens auditáveis: conformes × não conformes</h4>${svgDonut(rel)}</div>`
+            ? caixaGraficoEditavel('donut_conf', 'Itens auditáveis: conformes × não conformes', svgDonut(rel))
             : ''}
         </section>`;
 
@@ -1953,7 +1979,8 @@
     function ligarTextosEditaveis(tokens, recalcTokens) {
       document.querySelectorAll('[data-texto]').forEach(div => {
         const chave = div.dataset.texto;
-        div.textContent = textoAtual(chave, tokens);
+        const defaultVal = div.dataset.default || '';
+        div.textContent = textoAtual(chave, tokens, defaultVal);
         div.addEventListener('input', () => {
           const valor = typeof div.innerText === 'string' ? div.innerText : div.textContent;
           state.textos[chave] = { manual: true, valor };
@@ -1969,7 +1996,10 @@
           state.textos[chave] = { manual: false, valor: '' };
           salvarTextosLocais();
           const div = document.querySelector(`[data-texto="${chave}"]`);
-          if (div) div.textContent = textoAtual(chave, recalcTokens());
+          if (div) {
+              const defaultVal = div.dataset.default || '';
+              div.textContent = textoAtual(chave, recalcTokens(), defaultVal);
+          }
           marcarEdicao(chave, false);
           marcarStatusTexto(chave, 'salvando', 'Restaurando...');
           try {
@@ -1978,7 +2008,8 @@
           } catch (_) {
             marcarStatusTexto(chave, 'erro-salvar', 'Restaurado localmente');
           }
-          toast(`Texto de "${TITULOS_TEXTO[chave]}" voltou ao automático.`, 'info', 'Texto');
+          const nomeSecao = TITULOS_TEXTO[chave] || 'A seção';
+          toast(`Texto de "${nomeSecao}" voltou ao automático.`, 'info', 'Texto');
         });
       });
     }
@@ -2002,7 +2033,7 @@
        comorbidades e tempo de permanência). Todo o cálculo é feito
        no navegador a partir do dataset compacto (índices em RC).
        ============================================================ */
-    const FAIXA_ETARIA_ORDEM = ['<= 19 ANOS', '20 A 29 ANOS', '30 A 39 ANOS', '40 A 49 ANOS', '50 A 59 ANOS', '60 A 69 ANOS', '70 A 79 ANOS', '80 A 89 ANOS', '90 A 99 ANOS', '>= 100 ANOS'];
+    const FAIXA_ETARIA_ORDEM = ['0 A 28 DIAS', '29 DIAS A 24 MESES', '> 24 MESES A 19 ANOS', '<= 19 ANOS', '20 A 29 ANOS', '30 A 39 ANOS', '40 A 49 ANOS', '50 A 59 ANOS', '60 A 69 ANOS', '70 A 79 ANOS', '80 A 89 ANOS', '90 A 99 ANOS', '>= 100 ANOS'];
     // Categorias para tokenizar o campo livre de comorbidades. Cada óbito
     // conta no máximo uma vez por categoria; a busca é por palavra-chave no
     // texto normalizado (sem acento, maiúsculas).
@@ -2132,9 +2163,33 @@
       let analisados = 0, naoAnalisados = 0, londres = 0, eventos = 0, eventosForaEsclarecer = 0;
       let esclarecerTotal = 0, esclarecerAvaliado = 0;
       const evoMap = {};
+
+      const permPorUnidade = {};
+      const pendentesPorUnidade = {};
+      const heatPerm = {}; // { unidade: { faixa: { soma: 0, qtd: 0 } } }
+
       regs.forEach(r => {
         const an = obitoAnalisado(r[RC.avaliacao]);
         if (an) analisados++; else naoAnalisados++;
+
+        const unidade = r[RC.unidade] || 'Não informado';
+        if (!an) {
+            pendentesPorUnidade[unidade] = (pendentesPorUnidade[unidade] || 0) + 1;
+        }
+
+        const dias = r[RC.dias];
+        if (dias != null && !Number.isNaN(Number(dias))) {
+            const numDias = Number(dias);
+            if (!permPorUnidade[unidade]) permPorUnidade[unidade] = { soma: 0, qtd: 0 };
+            permPorUnidade[unidade].soma += numDias;
+            permPorUnidade[unidade].qtd++;
+
+            const faixa = r[RC.faixa] || 'Não informado';
+            if (!heatPerm[unidade]) heatPerm[unidade] = {};
+            if (!heatPerm[unidade][faixa]) heatPerm[unidade][faixa] = { soma: 0, qtd: 0 };
+            heatPerm[unidade][faixa].soma += numDias;
+            heatPerm[unidade][faixa].qtd++;
+        }
         // "A esclarecer" (STATUS == "A ESCLARECER"): conta o total e quantos,
         // dentro desse total, já tiveram a 1ª avaliação concluída — é essa
         // razão que dá a taxa de avaliados.
@@ -2185,7 +2240,14 @@
         porMacro: distribuicaoSimples(regs, RC.macro),
         porOrigem: distribuicaoSimples(regs, RC.origem),
         comorbidades: distribuicaoComorbidades(regs),
-        permanencia: distribuicaoPermanencia(regs)
+        permanencia: distribuicaoPermanencia(regs),
+        permanenciaPorUnidade: Object.keys(permPorUnidade)
+            .map(u => ({ rotulo: u, valor: permPorUnidade[u].soma / permPorUnidade[u].qtd, qtd: permPorUnidade[u].qtd }))
+            .sort((a, b) => b.valor - a.valor),
+        pendentesPorUnidade: Object.keys(pendentesPorUnidade)
+            .map(u => ({ rotulo: u, valor: pendentesPorUnidade[u] }))
+            .sort((a, b) => b.valor - a.valor),
+        heatPerm
       };
     }
 
@@ -2195,9 +2257,13 @@
       opcoes = opcoes || {};
       const limite = opcoes.limite || 12;
       const cor = opcoes.cor || '#0f766e';
+      const isMedia = opcoes.isMedia || false;
+      const fmtVal = opcoes.fmtVal || fmtNum;
+
       const lista = itens.slice(0, limite);
       if (!lista.length) return `<div style="display:grid;place-items:center;height:120px;color:var(--suave);font-size:11px">Sem dados no recorte selecionado.</div>`;
-      const totalBase = opcoes.total != null ? opcoes.total : itens.reduce((s, i) => s + i.valor, 0);
+
+      const totalBase = opcoes.total != null ? opcoes.total : (!isMedia ? itens.reduce((s, i) => s + i.valor, 0) : null);
       const maxValor = Math.max(1, ...lista.map(i => i.valor));
       const W = 520, linhaAlt = 25, gap = 9, padX = 2, rotuloW = 148, valorW = 86;
       const x0 = rotuloW;
@@ -2207,16 +2273,74 @@
       const linhas = lista.map((it, i) => {
         const y = i * (linhaAlt + gap);
         const w = Math.max(3, (it.valor / maxValor) * larguraBarra);
-        const pct = totalBase ? fmtPct((it.valor / totalBase) * 100) : '';
+        const pct = (totalBase && !isMedia) ? fmtPct((it.valor / totalBase) * 100) : '';
+        const auxText = isMedia ? (it.qtd ? `${it.qtd} pac.` : '') : pct;
+
         const cy = linhaAlt / 2 + 4;
         return `<g transform="translate(0 ${y})">
           <text x="${padX}" y="${cy}" font-size="12.5" fill="#41524f" font-weight="600">${esc(cortar(it.rotulo, 22))}</text>
           <rect x="${x0}" y="${(linhaAlt - barH) / 2 - 1}" width="${larguraBarra}" height="${barH}" rx="${barH / 2}" fill="#eef3f2"/>
           <rect x="${x0}" y="${(linhaAlt - barH) / 2 - 1}" width="${w.toFixed(1)}" height="${barH}" rx="${barH / 2}" fill="${cor}"/>
-          <text x="${W - padX}" y="${cy}" text-anchor="end" font-size="12.5" font-weight="700" fill="#1a2b2e">${fmtNum(it.valor)}<tspan fill="#7c8d8f" font-weight="600"> · ${pct}</tspan></text>
+          <text x="${W - padX}" y="${cy}" text-anchor="end" font-size="12.5" font-weight="700" fill="#1a2b2e">${fmtVal(it.valor)}<tspan fill="#7c8d8f" font-weight="600"> ${auxText ? '· ' + auxText : ''}</tspan></text>
         </g>`;
       }).join('');
       return `<svg viewBox="0 0 ${W} ${H}" role="img" width="100%" style="max-width:520px">${linhas}</svg>`;
+    }
+
+    // Heatmap / Tabela de Permanência Média
+    function tabelaHeatmapPermanencia(heatPerm) {
+      const unidades = Object.keys(heatPerm).sort();
+      if (!unidades.length) return `<div class="doc-recorte" style="margin:0">Sem dados de permanência por unidade e faixa etária.</div>`;
+
+      const faixasSet = new Set();
+      unidades.forEach(u => Object.keys(heatPerm[u]).forEach(f => faixasSet.add(f)));
+
+      const faixas = Array.from(faixasSet).sort((a, b) => {
+        const idxA = FAIXA_ETARIA_ORDEM.indexOf(a);
+        const idxB = FAIXA_ETARIA_ORDEM.indexOf(b);
+        return (idxA === -1 ? 99 : idxA) - (idxB === -1 ? 99 : idxB);
+      });
+
+      let maxMedia = 0;
+      unidades.forEach(u => {
+        faixas.forEach(f => {
+            if (heatPerm[u][f]) {
+                const media = heatPerm[u][f].soma / heatPerm[u][f].qtd;
+                if (media > maxMedia) maxMedia = media;
+            }
+        });
+      });
+      if (maxMedia === 0) maxMedia = 1;
+
+      const cabMeses = faixas.map(f => `<th class="num col-mes">${esc(f)}</th>`).join('');
+
+      const linhas = unidades.map((u) => {
+        const cels = faixas.map(f => {
+            const dado = heatPerm[u][f];
+            if (!dado) return `<td class="num cel-mapa" style="background:#edf0ef;color:#8a9fa3">—</td>`;
+            const media = dado.soma / dado.qtd;
+
+            // Generate a color scale based on maxMedia
+            const intensity = Math.min(100, (media / maxMedia) * 100);
+            const { bg, fg } = corGradiente(intensity); // Reuse existing corGradiente which goes Green -> Red, we probably want reverse or just re-use it as is
+            // Reusing corGradiente might be weird since Green = Good (100) and Red = Bad (0). For permanence, maybe higher is redder.
+            // Let's manually map it: white -> dark red
+            const r = 255;
+            const g = Math.max(0, 255 - (intensity * 2.55));
+            const b = Math.max(0, 255 - (intensity * 2.55));
+            const bgCell = `rgb(${r},${g},${b})`;
+            const fgCell = intensity > 50 ? '#fff' : '#000';
+
+            return `<td class="num cel-mapa" style="background:${bgCell};color:${fgCell}" title="${dado.qtd} pac.">${media.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td>`;
+        }).join('');
+        return `<tr><th scope="row" class="col-ind">${esc(u)}</th>${cels}</tr>`;
+      }).join('');
+
+      return `<div class="doc-tabela tabela-mapa"><table>
+        <thead><tr><th class="col-ind">Unidade</th>${cabMeses}</tr></thead>
+        <tbody>${linhas}</tbody></table>
+        <div class="legenda-mapa"><span class="grad-bar" style="background: linear-gradient(to right, rgb(255,255,255), rgb(255,0,0));border: 1px solid #ccc;"></span><span>Maior tempo de permanência</span></div>
+      </div>`;
     }
     function cortar(txt, n) { txt = String(txt || ''); return txt.length > n ? txt.slice(0, n - 1) + '…' : txt; }
 
@@ -2256,7 +2380,7 @@
     // identidade visual do gráfico de conformidade da CRP.
     function svgLinhaCRO(serie, meta, rotuloMeta, opcoes) {
       opcoes = opcoes || {};
-      const W = 480, H = 236, mx = 34, mt = 40, mb = 44, mr = 16;
+      const W = 480, H = 236, mx = 34, mt = 40, mb = 44, mr = 26; // Increased right margin
       const aw = W - mx - mr, ah = H - mt - mb;
       const pts0 = serie.filter(p => p.valor != null);
       if (!pts0.length) return `<div style="display:grid;place-items:center;height:${H}px;color:var(--suave);font-size:11px">Sem meses com dados no recorte selecionado.</div>`;
@@ -2373,7 +2497,7 @@
 
     function svgLinhasMultiplasCRO(series, opcoes) {
       opcoes = opcoes || {};
-      const W = 520, H = 210, mx = 34, mt = 16, mb = 40, mr = 18;
+      const W = 520, H = 210, mx = 34, mt = 16, mb = 40, mr = 26; // Increased right margin
       const aw = W - mx - mr, ah = H - mt - mb;
       const pontos = series.reduce((acc, s) => acc.concat((s.dados || []).filter(p => p.valor != null)), []);
       if (!pontos.length) return `<div style="display:grid;place-items:center;height:${H}px;color:var(--suave);font-size:11px">Sem dados no recorte selecionado.</div>`;
@@ -2475,9 +2599,18 @@
       };
     }
 
-    /* ===== Documento da CRO ===== */
-    function caixaGraficoCRO(titulo, conteudo, full) {
-      return `<div class="grafico-caixa"${full ? ' style="grid-column: 1 / -1"' : ''}><h4>${esc(titulo)}</h4>${conteudo}</div>`;
+    /* ===== Documento genérico e CRO ===== */
+    function caixaGraficoEditavel(idGrafico, tituloPadrao, conteudo, full) {
+      const preTextoChave = `graf_pre_${idGrafico}`;
+      const titleChave = `graf_title_${idGrafico}`;
+      const fonteChave = `graf_fonte_${idGrafico}`;
+
+      return `<div class="grafico-caixa"${full ? ' style="grid-column: 1 / -1"' : ''}>
+          <div class="doc-texto" contenteditable="true" spellcheck="true" data-texto="${preTextoChave}" data-default="" style="margin-bottom: 8px; font-size: 10px; min-height: 14px;" placeholder="Insira texto antes do gráfico aqui (opcional)..."></div>
+          <h4 class="doc-texto" contenteditable="true" spellcheck="true" data-texto="${titleChave}" data-default="${esc(tituloPadrao)}" style="margin: 0 0 6px; font-size: 11px; font-weight: 800; color: var(--suave); text-transform: uppercase; letter-spacing: .06em; min-height: 14px;"></h4>
+          ${conteudo}
+          <div class="doc-texto" contenteditable="true" spellcheck="true" data-texto="${fonteChave}" data-default="Fonte: Relatório Institucional." style="margin-top: 8px; font-size: 8px; color: var(--suave); text-align: left; min-height: 12px;"></div>
+      </div>`;
     }
 
     // Gráficos de evolução (linhas) da CRO.
@@ -2491,14 +2624,14 @@
       const temEvol = rel.evolucao.length >= 1;
       const temMort = serieMortalidade.some(e => e.valor != null);
       const graficos = [
-          temMort ? caixaGraficoCRO('Taxa de mortalidade institucional', svgLinhaCRO(serieMortalidade, null, null, { escalaAuto: true }), true) : '',
-          temEvol ? caixaGraficoCRO('Estratificação da primeira análise', svgLinhasMultiplasCRO([
+          temMort ? caixaGraficoEditavel('mort_inst', 'Taxa de mortalidade institucional', svgLinhaCRO(serieMortalidade, null, null, { escalaAuto: true }), true) : '',
+          temEvol ? caixaGraficoEditavel('estrat', 'Estratificação da primeira análise', svgLinhasMultiplasCRO([
             { nome: 'Justificado / inevitável', cor: '#2563eb', dados: serieJust },
             { nome: 'A esclarecer', cor: '#dc2626', dados: serieEsc },
             { nome: 'Oportunidade de melhoria', cor: '#ca8a04', dados: serieOport }
           ], { label: 'Estratificação da primeira análise' }), true) : '',
-          temEvol ? caixaGraficoCRO('Taxa de óbitos a esclarecer avaliados (Protocolo de Londres)', svgLinhaCRO(serieEsclarecerAval, null), true) : '',
-          temEvol ? caixaGraficoCRO('Taxa de avaliação de óbitos (1ª análise)', svgLinhaCRO(serieAval, rel.metaInstitucional, 'META ' + String(rel.metaInstitucional).replace('.', ',') + '%'), true) : ''
+          temEvol ? caixaGraficoEditavel('londres', 'Taxa de óbitos a esclarecer avaliados (Protocolo de Londres)', svgLinhaCRO(serieEsclarecerAval, null), true) : '',
+          temEvol ? caixaGraficoEditavel('1a_analise', 'Taxa de avaliação de óbitos (1ª análise)', svgLinhaCRO(serieAval, rel.metaInstitucional, 'META ' + String(rel.metaInstitucional).replace('.', ',') + '%'), true) : ''
         ].filter(Boolean);
 
       const paginas = [];
@@ -2513,10 +2646,13 @@
     function tabelaEvolucaoCRO(linhas, rel, opts) {
       opts = opts || {};
       if (!linhas.length) return '';
-      const corpo = linhas.map(e => `<tr><td>${esc(rotuloPeriodo(e.ano, e.mes))}</td><td class="num">${fmtNum(e.total)}</td><td class="num">${fmtNum(e.analisados)}</td><td class="num">${seloPct(e.taxaAnalisados)}</td><td class="num">${fmtNum(e.londres)}</td></tr>`).join('');
-      const total = opts.consolidado === false ? '' : `<tr class="linha-total"><td>Consolidado</td><td class="num">${fmtNum(rel.total)}</td><td class="num">${fmtNum(rel.analisados)}</td><td class="num">${seloPct(rel.taxaAnalisados)}</td><td class="num">${fmtNum(rel.londres)}</td></tr>`;
+
+      const calcPendente = taxa => taxa != null ? 100 - taxa : null;
+
+      const corpo = linhas.map(e => `<tr><td>${esc(rotuloPeriodo(e.ano, e.mes))}</td><td class="num">${fmtNum(e.total)}</td><td class="num">${fmtNum(e.analisados)}</td><td class="num">${seloPct(e.taxaAnalisados)}</td><td class="num">${seloPct(calcPendente(e.taxaAnalisados))}</td><td class="num">${fmtNum(e.londres)}</td></tr>`).join('');
+      const total = opts.consolidado === false ? '' : `<tr class="linha-total"><td>Consolidado</td><td class="num">${fmtNum(rel.total)}</td><td class="num">${fmtNum(rel.analisados)}</td><td class="num">${seloPct(rel.taxaAnalisados)}</td><td class="num">${seloPct(calcPendente(rel.taxaAnalisados))}</td><td class="num">${fmtNum(rel.londres)}</td></tr>`;
       return `<div class="doc-tabela"><table>
-        <thead><tr><th>Período</th><th class="num">Óbitos</th><th class="num">Analisados</th><th class="num">Tx. avaliação</th><th class="num">A esclarecer</th></tr></thead>
+        <thead><tr><th>Período</th><th class="num">Óbitos</th><th class="num">Analisados</th><th class="num">Tx. avaliação</th><th class="num">% Pendente</th><th class="num">A esclarecer</th></tr></thead>
         <tbody>${corpo}${total}</tbody></table></div>`;
     }
 
@@ -2557,8 +2693,8 @@
         ${secaoTexto(1, 'apresentacao')}
         ${secaoTexto(2, 'epidemiologia')}
         <section class="doc-graficos">
-          ${caixaGraficoCRO('Sexo', svgPizzaCRO(rel.porSexo))}
-          ${caixaGraficoCRO('Faixa etária', svgBarrasCRO(rel.porFaixa, { total: rel.total }))}
+          ${caixaGraficoEditavel('sexo', 'Sexo', svgPizzaCRO(rel.porSexo))}
+          ${caixaGraficoEditavel('faixa', 'Faixa etária', svgBarrasCRO(rel.porFaixa, { total: rel.total }))}
         </section>
         ${alertasEstruturaDoc()}`;
 
@@ -2572,17 +2708,29 @@
       // juntas na mesma folha.
       const pagina2 = `
         <section class="doc-graficos">
-          ${caixaGraficoCRO('Óbitos por unidade', svgBarrasCRO(rel.porUnidade, { total: rel.total }), true)}
-          ${caixaGraficoCRO('Tempo de permanência', svgBarrasCRO(rel.permanencia.itens, { total: rel.permanencia.comDado }), true)}
+          ${caixaGraficoEditavel('obitos_unidade', 'Óbitos por unidade', svgBarrasCRO(rel.porUnidade, { total: rel.total }), true)}
+          ${caixaGraficoEditavel('permanencia', 'Tempo de permanência', svgBarrasCRO(rel.permanencia.itens, { total: rel.permanencia.comDado }), true)}
         </section>
         ${permNota}`;
 
       const pagina3 = `
         <section class="doc-graficos">
-          ${caixaGraficoCRO('Unidade de origem', svgBarrasCRO(rel.porOrigem, { total: rel.total, limite: 10 }), true)}
-          ${caixaGraficoCRO('Comorbidades mais frequentes', svgBarrasCRO(rel.comorbidades.itens, { total: rel.comorbidades.comRegistro, limite: 12 }), true)}
+          ${caixaGraficoEditavel('origem', 'Unidade de origem', svgBarrasCRO(rel.porOrigem, { total: rel.total, limite: 10 }), true)}
+          ${caixaGraficoEditavel('comorbidades', 'Comorbidades mais frequentes', svgBarrasCRO(rel.comorbidades.itens, { total: rel.comorbidades.comRegistro, limite: 12 }), true)}
         </section>
         ${comorbNota}`;
+
+      const paginaNovosGraficos = `
+        <section class="doc-graficos">
+            ${caixaGraficoEditavel('permanencia_unidade', 'Tempo Médio de Permanência por Unidade', svgBarrasCRO(rel.permanenciaPorUnidade, { isMedia: true, fmtVal: v => v.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' dias' }), true)}
+            ${caixaGraficoEditavel('pendentes_unidade', 'Prontuários Pendentes de Avaliação por Unidade/Setor', svgBarrasCRO(rel.pendentesPorUnidade, { total: rel.naoAnalisados }), true)}
+        </section>`;
+
+      const paginaHeatmap = `
+        <section class="doc-secao">
+            <div class="doc-secao-cab"><h3>Cruzamento: Permanência Média por Unidade e Idades</h3></div>
+            ${tabelaHeatmapPermanencia(rel.heatPerm)}
+        </section>`;
 
       // Página 4 — texto de indicadores + 1ª página de gráficos juntos na mesma folha.
       // Antes o texto ficava sozinho numa folha e os gráficos vinham na seguinte.
@@ -2682,7 +2830,7 @@
         paginasFinais.push(fechamentoFinal);
       }
 
-      const corpos = [pagina1, pagina2, pagina3, ...paginasIndicadores, ...paginasEvo, ...paginasFinais];
+      const corpos = [pagina1, pagina2, pagina3, paginaNovosGraficos, paginaHeatmap, ...paginasIndicadores, ...paginasEvo, ...paginasFinais];
       const total = corpos.length;
       $('documento').innerHTML = corpos.map((c, i) => montarPagina(tokens, i + 1, total, c)).join('');
       ligarTextosEditaveis(tokens, () => tokensAtuaisCRO(agregarCRO(registrosFiltrados())));
@@ -3097,6 +3245,7 @@
       set('adm-conforme', (cfg.termosConforme || []).join('\n'));
       set('adm-naoconforme', (cfg.termosNaoConforme || []).join('\n'));
       set('adm-naoaplica', (cfg.termosNaoSeAplica || []).join('\n'));
+      set('adm-aliases-cro', (cfg.aliasesSetoresCRO || []).join('\n'));
       $('adm-indicadores').innerHTML = (cfg.indicadores || []).map((nome, i) =>
         `<div class="item-indicador"><span>${i + 1}</span><input type="text" class="entrada adm-ind" value="${esc(String(nome || ''))}"></div>`).join('');
       $('admin-info').innerHTML = cfg.atualizadoEm
@@ -3125,6 +3274,7 @@
         termosConforme: linhas('adm-conforme'),
         termosNaoConforme: linhas('adm-naoconforme'),
         termosNaoSeAplica: linhas('adm-naoaplica'),
+        aliasesSetoresCRO: linhas('adm-aliases-cro'),
         indicadores: Array.from(document.querySelectorAll('#adm-indicadores .adm-ind')).map(i => i.value)
       };
     }
