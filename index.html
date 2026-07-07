@@ -8,11 +8,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
-    /* ==================================================================
        Design system — autossuficiente, sem fontes ou CSS externos.
        Paleta institucional teal sobre papel claro; documento e interface
        usam a sans moderna do sistema (limpa também no PDF impresso).
-       ================================================================== */
     :root {
       --brand: #0f766e;
       --brand-escuro: #0b5a54;
@@ -414,6 +412,8 @@
     .tabela-mapa th.col-ind, .tabela-mapa td.col-ind { position: sticky; left: 0; z-index: 2; text-align: left; max-width: 168px; white-space: normal; background: #f4f7f6; font-weight: 700; color: var(--tinta); border-right: 1.5px solid var(--linha); }
     .tabela-mapa thead th.col-ind { z-index: 3; }
     .tabela-mapa th.col-mes { font-size: 8.6px; min-width: 44px; text-align: center; }
+    .tabela-heatmap-vert th.col-mes { writing-mode: vertical-rl; transform: rotate(180deg); padding: 8px 4px; min-width: 24px; text-align: left; }
+    .tabela-heatmap-vert td.cel-mapa { min-width: 24px; padding: 4px 2px; }
     .tabela-mapa td.cel-mapa { text-align: center; font-weight: 800; font-variant-numeric: tabular-nums; min-width: 44px; }
     .tabela-mapa .col-spark { width: 96px; padding: 2px 6px; }
     .tabela-mapa svg.spark { display: block; width: 92px; height: 22px; }
@@ -768,7 +768,6 @@
   <script>
     'use strict';
 
-    /* ================= Constantes e estado ================= */
     const APP_URL = '<?!= appUrl ?>';
 
     // Índices posicionais de cada registro do dataset compacto da CRP (ver Code.gs).
@@ -836,6 +835,7 @@
       CHAVES_TEXTO_GRAFICOS_EXPANDIDAS.push(`graf_pre_${k}`);
       CHAVES_TEXTO_GRAFICOS_EXPANDIDAS.push(`graf_fonte_${k}`);
     });
+
 
     const CHAVES_TEXTO_TODAS = CHAVES_TEXTO.concat(CHAVES_TEXTO_CRO).concat(CHAVES_TEXTO_GRAFICOS_EXPANDIDAS);
     const TITULOS_TEXTO = {
@@ -936,7 +936,6 @@
 
     carregarTextosLocais();
 
-    /* ================= Utilitários ================= */
     function $(id) { return document.getElementById(id); }
     function esc(valor) {
       return String(valor == null ? '' : valor)
@@ -993,7 +992,6 @@
       return Promise.race([promessa, limite]).finally(() => clearTimeout(timer));
     }
 
-    /* ================= Comunicação com o Apps Script ================= */
     function rpcDados(refresh, comissao) {
       const cro = comissao === 'CRO';
       if (window.google && google.script && google.script.run) {
@@ -1022,7 +1020,6 @@
       return String(payload && payload.base && payload.base.comissao || '').trim().toUpperCase();
     }
 
-    /* ================= Filtro e agregação (100% no navegador) ================= */
     function registrosFiltrados(ignorarId) {
       const regs = state.dados ? state.dados.base.registros : [];
       return regs.filter(r => FILTROS.every(f => {
@@ -1136,7 +1133,6 @@
       };
     }
 
-    /* ================= Textos narrativos (tokens + edição inline) ================= */
     // Quando não há filtro de mês/ano (recorte = tudo), em vez do genérico
     // "todos os meses de todos os anos" mostramos o intervalo real dos dados:
     // "de {primeiro} a {último}", detectado a partir da evolução mensal já
@@ -1199,7 +1195,6 @@
       return defaultVal;
     }
 
-    /* ================= Gráficos SVG (vetoriais, sem bibliotecas) ================= */
     function caminhoSuave(pts) {
       // Curva cúbica passando por todos os pontos (Catmull-Rom → Bézier).
       if (pts.length < 2) return '';
@@ -1292,7 +1287,6 @@
         `<div class="legenda">${legenda}</div>`;
     }
 
-    /* ================= Montagem do documento ================= */
     function cabecalhoDoc(tokens) {
       const cfg = state.dados.config;
       const info = comissaoInfo();
@@ -2027,14 +2021,12 @@
       btn.textContent = editado ? '✎ editado · restaurar' : '↺ automático';
     }
 
-    /* ============================================================
        RELATÓRIO CRO — agregação, gráficos e documento
        A CRO analisa óbitos: cada registro é um óbito com unidade,
        status da 1ª avaliação, evento adverso e o perfil
        epidemiológico (sexo, faixa etária, macrorregião, origem,
        comorbidades e tempo de permanência). Todo o cálculo é feito
        no navegador a partir do dataset compacto (índices em RC).
-       ============================================================ */
     const FAIXA_ETARIA_ORDEM = ['0 A 28 DIAS', '29 DIAS A 24 MESES', '> 24 MESES A 19 ANOS', '<= 19 ANOS', '20 A 29 ANOS', '30 A 39 ANOS', '40 A 49 ANOS', '50 A 59 ANOS', '60 A 69 ANOS', '70 A 79 ANOS', '80 A 89 ANOS', '90 A 99 ANOS', '>= 100 ANOS'];
     // Categorias para tokenizar o campo livre de comorbidades. Cada óbito
     // conta no máximo uma vez por categoria; a busca é por palavra-chave no
@@ -2174,6 +2166,15 @@
         const an = obitoAnalisado(r[RC.avaliacao]);
         if (an) analisados++; else naoAnalisados++;
 
+
+      const permPorUnidade = {};
+      const pendentesPorUnidade = {};
+      const heatPerm = {}; // { unidade: { faixa: { soma: 0, qtd: 0 } } }
+
+      regs.forEach(r => {
+        const an = obitoAnalisado(r[RC.avaliacao]);
+        if (an) analisados++; else naoAnalisados++;
+
         const unidade = r[RC.unidade] || 'Não informado';
         if (!an) {
             pendentesPorUnidade[unidade] = (pendentesPorUnidade[unidade] || 0) + 1;
@@ -2185,6 +2186,7 @@
             if (!permPorUnidade[unidade]) permPorUnidade[unidade] = { soma: 0, qtd: 0 };
             permPorUnidade[unidade].soma += numDias;
             permPorUnidade[unidade].qtd++;
+
 
             const faixa = r[RC.faixa] || 'Não informado';
             if (!heatPerm[unidade]) heatPerm[unidade] = {};
@@ -2265,6 +2267,10 @@
       const lista = itens.slice(0, limite);
       if (!lista.length) return `<div style="display:grid;place-items:center;height:120px;color:var(--suave);font-size:11px">Sem dados no recorte selecionado.</div>`;
 
+
+      const lista = itens.slice(0, limite);
+      if (!lista.length) return `<div style="display:grid;place-items:center;height:120px;color:var(--suave);font-size:11px">Sem dados no recorte selecionado.</div>`;
+
       const totalBase = opcoes.total != null ? opcoes.total : (!isMedia ? itens.reduce((s, i) => s + i.valor, 0) : null);
       const maxValor = Math.max(1, ...lista.map(i => i.valor));
       const W = 520, linhaAlt = 25, gap = 9, padX = 2, rotuloW = 148, valorW = 86;
@@ -2278,6 +2284,7 @@
         const pct = (totalBase && !isMedia) ? fmtPct((it.valor / totalBase) * 100) : '';
         const auxText = isMedia ? (it.qtd ? `${it.qtd} pac.` : '') : pct;
 
+
         const cy = linhaAlt / 2 + 4;
         return `<g transform="translate(0 ${y})">
           <text x="${padX}" y="${cy}" font-size="12.5" fill="#41524f" font-weight="600">${esc(cortar(it.rotulo, 22))}</text>
@@ -2288,6 +2295,7 @@
       }).join('');
       return `<svg viewBox="0 0 ${W} ${H}" role="img" width="100%" style="max-width:520px">${linhas}</svg>`;
     }
+
 
     // Heatmap / Tabela de Permanência Média paginado
     function paginasHeatmapPermanencia(heatPerm) {
@@ -2301,11 +2309,16 @@
       const faixasSet = new Set();
       unidades.forEach(u => Object.keys(heatPerm[u]).forEach(f => faixasSet.add(f)));
 
+
+      const faixasSet = new Set();
+      unidades.forEach(u => Object.keys(heatPerm[u]).forEach(f => faixasSet.add(f)));
+
       const faixas = Array.from(faixasSet).sort((a, b) => {
         const idxA = FAIXA_ETARIA_ORDEM.indexOf(a);
         const idxB = FAIXA_ETARIA_ORDEM.indexOf(b);
         return (idxA === -1 ? 99 : idxA) - (idxB === -1 ? 99 : idxB);
       });
+
 
       let maxMedia = 0;
       unidades.forEach(u => {
@@ -2320,11 +2333,15 @@
 
       const cabMeses = faixas.map(f => `<th class="num col-mes">${esc(f)}</th>`).join('');
 
+
+      const cabMeses = faixas.map(f => `<th class="num col-mes">${esc(f)}</th>`).join('');
+
       const linhas = unidades.map((u) => {
         const cels = faixas.map(f => {
             const dado = heatPerm[u][f];
             if (!dado) return `<td class="num cel-mapa" style="background:#edf0ef;color:#8a9fa3">—</td>`;
             const media = dado.soma / dado.qtd;
+
 
             const intensity = Math.min(100, (media / maxMedia) * 100);
             const r = 255;
@@ -2333,10 +2350,12 @@
             const bgCell = `rgb(${r},${g},${b})`;
             const fgCell = intensity > 50 ? '#fff' : '#000';
 
+
             return `<td class="num cel-mapa" style="background:${bgCell};color:${fgCell}" title="${dado.qtd} pac.">${media.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td>`;
         }).join('');
         return `<tr><th scope="row" class="col-ind">${esc(u)}</th>${cels}</tr>`;
       });
+
 
       const linhasPorFolha = 26; // Limite de linhas da tabela para caber numa folha A4 com folga
       const blocos = [];
@@ -2346,7 +2365,7 @@
 
       return blocos.map((blocoLinhas, idx) => {
           const nota = blocos.length > 1 ? `<span class="doc-secao-nota">parte ${idx + 1}/${blocos.length}</span>` : '';
-          const tabela = `<div class="doc-tabela tabela-mapa"><table>
+          const tabela = `<div class="doc-tabela tabela-mapa tabela-heatmap-vert"><table>
             <thead><tr><th class="col-ind">Unidade</th>${cabMeses}</tr></thead>
             <tbody>${blocoLinhas.join('')}</tbody></table>
             ${idx === blocos.length - 1 ? `<div class="legenda-mapa"><span class="grad-bar" style="background: linear-gradient(to right, rgb(255,255,255), rgb(255,0,0));border: 1px solid #ccc;"></span><span>Maior tempo de permanência</span></div>` : ''}
@@ -2620,6 +2639,7 @@
       const titleChave = `graf_title_${idGrafico}`;
       const fonteChave = `graf_fonte_${idGrafico}`;
 
+
       return `<div class="grafico-caixa"${full ? ' style="grid-column: 1 / -1"' : ''}>
           <div class="doc-texto" contenteditable="true" spellcheck="true" data-texto="${preTextoChave}" data-default="" style="margin-bottom: 8px; font-size: 10px; min-height: 14px;" placeholder="Insira texto antes do gráfico aqui (opcional)..."></div>
           <h4 class="doc-texto" contenteditable="true" spellcheck="true" data-texto="${titleChave}" data-default="${esc(tituloPadrao)}" style="margin: 0 0 6px; font-size: 11px; font-weight: 800; color: var(--suave); text-transform: uppercase; letter-spacing: .06em; min-height: 14px;"></h4>
@@ -2661,6 +2681,9 @@
     function tabelaEvolucaoCRO(linhas, rel, opts) {
       opts = opts || {};
       if (!linhas.length) return '';
+
+      const calcPendente = taxa => taxa != null ? 100 - taxa : null;
+
 
       const calcPendente = taxa => taxa != null ? 100 - taxa : null;
 
@@ -2734,6 +2757,17 @@
           ${caixaGraficoEditavel('comorbidades', 'Comorbidades mais frequentes', svgBarrasCRO(rel.comorbidades.itens, { total: rel.comorbidades.comRegistro, limite: 12 }), true)}
         </section>
         ${comorbNota}`;
+
+      const paginasNovosGraficos = [
+        `<section class="doc-graficos">
+            ${caixaGraficoEditavel('permanencia_unidade', 'Tempo Médio de Permanência por Unidade', svgBarrasCRO(rel.permanenciaPorUnidade, { limite: 15, isMedia: true, fmtVal: v => v.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' dias' }), true)}
+        </section>`,
+        `<section class="doc-graficos">
+            ${caixaGraficoEditavel('pendentes_unidade', 'Prontuários Pendentes de Avaliação por Unidade/Setor', svgBarrasCRO(rel.pendentesPorUnidade, { limite: 15, total: rel.naoAnalisados }), true)}
+        </section>`
+      ];
+
+      const paginasHeatmap = paginasHeatmapPermanencia(rel.heatPerm);
 
       const paginasNovosGraficos = [
         `<section class="doc-graficos">
@@ -2871,7 +2905,6 @@
         ${(state.dados.base.alertasEstrutura || []).length ? `<div class="aviso-estrutura ativo"><span aria-hidden="true">⚠</span><span>${(state.dados.base.alertasEstrutura || []).length} alerta(s) de estrutura na base — detalhes no documento.</span></div>` : ''}`;
     }
 
-    /* ================= Painel lateral: resumo e filtros ================= */
     function renderResumo(rel) {
       $('res-taxa').textContent = fmtPct(rel.taxaBonsExcelentes);
       $('res-conformidade').textContent = fmtPct(rel.conformidadeGeral);
@@ -3049,7 +3082,6 @@
       }));
     }
 
-    /* ================= Orquestração ================= */
     // Guarda o HTML original do resumo da CRP para restaurar ao voltar de CRO.
     let resumoCRPHtml = null;
     function garantirResumoCRP() {
@@ -3168,7 +3200,6 @@
       }
     }
 
-    /* ================= Exportação =================
        CRP e CRO usam o MESMO caminho: impressão nativa do navegador. Cada
        seção .pagina é dimensionada para caber em exatamente uma folha A4
        (ver renderDocumento/renderDocumentoCRO), então "Salvar como PDF" sai
@@ -3192,7 +3223,6 @@
       }
     }
 
-    /* ================= Administração ================= */
     function rpcConfig(metodo, arg) {
       return new Promise((resolve, reject) => {
         if (window.google && google.script && google.script.run) {
@@ -3341,7 +3371,6 @@
       }
     }
 
-    /* ================= Inicialização ================= */
     function ligarEventos() {
       $('btn-atualizar').addEventListener('click', () => iniciar(true));
       $('btn-imprimir').addEventListener('click', () => window.print());
