@@ -359,6 +359,7 @@
       padding: 2px 4px;
       margin: 0 -4px;
     }
+    .doc-texto:empty::before { content: attr(placeholder); color: #9aabae; pointer-events: none; display: block; }
     .doc-texto:hover { background: #f6faf9; }
     .doc-texto:focus { background: var(--brand-claro); box-shadow: 0 0 0 2px rgba(15,118,110,.25); }
     .botao-restaurar {
@@ -585,6 +586,7 @@
          ficar mais fina só na impressão, sem mudar a tela. */
       .doc-cab { border-bottom-width: 1px; }
       .doc-texto { background: none !important; box-shadow: none !important; }
+      .doc-texto:empty { display: none !important; margin: 0 !important; padding: 0 !important; min-height: 0 !important; }
       .botao-restaurar { display: none !important; }
     }
     @media (prefers-reduced-motion: reduce) {
@@ -2287,10 +2289,14 @@
       return `<svg viewBox="0 0 ${W} ${H}" role="img" width="100%" style="max-width:520px">${linhas}</svg>`;
     }
 
-    // Heatmap / Tabela de Permanência Média
-    function tabelaHeatmapPermanencia(heatPerm) {
+    // Heatmap / Tabela de Permanência Média paginado
+    function paginasHeatmapPermanencia(heatPerm) {
       const unidades = Object.keys(heatPerm).sort();
-      if (!unidades.length) return `<div class="doc-recorte" style="margin:0">Sem dados de permanência por unidade e faixa etária.</div>`;
+      if (!unidades.length) return [`
+        <section class="doc-secao">
+            <div class="doc-secao-cab"><h3>Cruzamento: Permanência Média por Unidade e Idades</h3></div>
+            <div class="doc-recorte" style="margin:0">Sem dados de permanência por unidade e faixa etária.</div>
+        </section>`];
 
       const faixasSet = new Set();
       unidades.forEach(u => Object.keys(heatPerm[u]).forEach(f => faixasSet.add(f)));
@@ -2320,11 +2326,7 @@
             if (!dado) return `<td class="num cel-mapa" style="background:#edf0ef;color:#8a9fa3">—</td>`;
             const media = dado.soma / dado.qtd;
 
-            // Generate a color scale based on maxMedia
             const intensity = Math.min(100, (media / maxMedia) * 100);
-            const { bg, fg } = corGradiente(intensity); // Reuse existing corGradiente which goes Green -> Red, we probably want reverse or just re-use it as is
-            // Reusing corGradiente might be weird since Green = Good (100) and Red = Bad (0). For permanence, maybe higher is redder.
-            // Let's manually map it: white -> dark red
             const r = 255;
             const g = Math.max(0, 255 - (intensity * 2.55));
             const b = Math.max(0, 255 - (intensity * 2.55));
@@ -2334,13 +2336,26 @@
             return `<td class="num cel-mapa" style="background:${bgCell};color:${fgCell}" title="${dado.qtd} pac.">${media.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td>`;
         }).join('');
         return `<tr><th scope="row" class="col-ind">${esc(u)}</th>${cels}</tr>`;
-      }).join('');
+      });
 
-      return `<div class="doc-tabela tabela-mapa"><table>
-        <thead><tr><th class="col-ind">Unidade</th>${cabMeses}</tr></thead>
-        <tbody>${linhas}</tbody></table>
-        <div class="legenda-mapa"><span class="grad-bar" style="background: linear-gradient(to right, rgb(255,255,255), rgb(255,0,0));border: 1px solid #ccc;"></span><span>Maior tempo de permanência</span></div>
-      </div>`;
+      const linhasPorFolha = 26; // Limite de linhas da tabela para caber numa folha A4 com folga
+      const blocos = [];
+      for (let i = 0; i < linhas.length; i += linhasPorFolha) {
+          blocos.push(linhas.slice(i, i + linhasPorFolha));
+      }
+
+      return blocos.map((blocoLinhas, idx) => {
+          const nota = blocos.length > 1 ? `<span class="doc-secao-nota">parte ${idx + 1}/${blocos.length}</span>` : '';
+          const tabela = `<div class="doc-tabela tabela-mapa"><table>
+            <thead><tr><th class="col-ind">Unidade</th>${cabMeses}</tr></thead>
+            <tbody>${blocoLinhas.join('')}</tbody></table>
+            ${idx === blocos.length - 1 ? `<div class="legenda-mapa"><span class="grad-bar" style="background: linear-gradient(to right, rgb(255,255,255), rgb(255,0,0));border: 1px solid #ccc;"></span><span>Maior tempo de permanência</span></div>` : ''}
+          </div>`;
+          return `<section class="doc-secao">
+            <div class="doc-secao-cab"><h3>Cruzamento: Permanência Média por Unidade e Idades</h3>${nota}</div>
+            ${tabela}
+          </section>`;
+      });
     }
     function cortar(txt, n) { txt = String(txt || ''); return txt.length > n ? txt.slice(0, n - 1) + '…' : txt; }
 
@@ -2720,17 +2735,16 @@
         </section>
         ${comorbNota}`;
 
-      const paginaNovosGraficos = `
-        <section class="doc-graficos">
-            ${caixaGraficoEditavel('permanencia_unidade', 'Tempo Médio de Permanência por Unidade', svgBarrasCRO(rel.permanenciaPorUnidade, { isMedia: true, fmtVal: v => v.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' dias' }), true)}
-            ${caixaGraficoEditavel('pendentes_unidade', 'Prontuários Pendentes de Avaliação por Unidade/Setor', svgBarrasCRO(rel.pendentesPorUnidade, { total: rel.naoAnalisados }), true)}
-        </section>`;
+      const paginasNovosGraficos = [
+        `<section class="doc-graficos">
+            ${caixaGraficoEditavel('permanencia_unidade', 'Tempo Médio de Permanência por Unidade', svgBarrasCRO(rel.permanenciaPorUnidade, { limite: 15, isMedia: true, fmtVal: v => v.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' dias' }), true)}
+        </section>`,
+        `<section class="doc-graficos">
+            ${caixaGraficoEditavel('pendentes_unidade', 'Prontuários Pendentes de Avaliação por Unidade/Setor', svgBarrasCRO(rel.pendentesPorUnidade, { limite: 15, total: rel.naoAnalisados }), true)}
+        </section>`
+      ];
 
-      const paginaHeatmap = `
-        <section class="doc-secao">
-            <div class="doc-secao-cab"><h3>Cruzamento: Permanência Média por Unidade e Idades</h3></div>
-            ${tabelaHeatmapPermanencia(rel.heatPerm)}
-        </section>`;
+      const paginasHeatmap = paginasHeatmapPermanencia(rel.heatPerm);
 
       // Página 4 — texto de indicadores + 1ª página de gráficos juntos na mesma folha.
       // Antes o texto ficava sozinho numa folha e os gráficos vinham na seguinte.
@@ -2830,7 +2844,7 @@
         paginasFinais.push(fechamentoFinal);
       }
 
-      const corpos = [pagina1, pagina2, pagina3, paginaNovosGraficos, paginaHeatmap, ...paginasIndicadores, ...paginasEvo, ...paginasFinais];
+      const corpos = [pagina1, pagina2, pagina3, ...paginasNovosGraficos, ...paginasHeatmap, ...paginasIndicadores, ...paginasEvo, ...paginasFinais];
       const total = corpos.length;
       $('documento').innerHTML = corpos.map((c, i) => montarPagina(tokens, i + 1, total, c)).join('');
       ligarTextosEditaveis(tokens, () => tokensAtuaisCRO(agregarCRO(registrosFiltrados())));
