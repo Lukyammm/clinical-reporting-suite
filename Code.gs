@@ -1355,6 +1355,7 @@ function obterDadosRelatorio(opcoes) {
   return executarRota('rpc-dados', () => montarPayloadDados(Boolean(opcoes && opcoes.refresh)));
 }
 
+/* ============================================================
    RELATÓRIO CRO — Comissão de Revisão de Óbitos
    ------------------------------------------------------------
    Diferente da CRP (conformidade de itens do prontuário), a CRO
@@ -1369,6 +1370,7 @@ function obterDadosRelatorio(opcoes) {
    (tolerante a reordenação, ao sufixo "GRÁFICO" e a cabeçalhos de
    múltiplas linhas) e devolve um dataset compacto. Filtro,
    agregação e montagem do documento acontecem no navegador.
+   ============================================================ */
 const META_CRO_AVALIACAO = 100;
 
 // Nomes de aba aceitos para a base da CRO, em ordem de preferência.
@@ -1593,7 +1595,6 @@ function faixaPorIdadeDiasCRO(dias) {
   if (dias <= 730) return '29 DIAS A 24 MESES';
   if (dias <= 19 * 365 + 364) return '> 24 MESES A 19 ANOS';
 
-
   const anos = Math.floor(dias / 365);
   if (anos >= 100) return '>= 100 ANOS';
   const dezena = Math.floor(anos / 10) * 10;
@@ -1788,10 +1789,6 @@ function montarPayloadDadosCRO(forcarRefresh) {
     let unidade = limparValorCRO(valorCol(row, 'unidadeObito'));
     unidade = aplicarAliasesSetor(unidade, cfg.aliasesSetoresCRO);
 
-
-    let unidade = limparValorCRO(valorCol(row, 'unidadeObito'));
-    unidade = aplicarAliasesSetor(unidade, cfg.aliasesSetoresCRO);
-
     const mes = normalizarMes(valorCol(row, 'mes'));
     const ano = normalizarAno(limparValorCRO(valorCol(row, 'ano')));
     // Linha é válida se tem ao menos prontuário, unidade ou mês reconhecível.
@@ -1801,10 +1798,6 @@ function montarPayloadDadosCRO(forcarRefresh) {
     const idadeNum = numeroOuNull(limparValorCRO(valorCol(row, 'idade')));
 
     const idadeOriginal = limparValorCRO(valorCol(row, 'idade'));
-
-    let unidadeOrigem = limparValorCRO(valorCol(row, 'unidadeOrigem'));
-    unidadeOrigem = aplicarAliasesSetor(unidadeOrigem, cfg.aliasesSetoresCRO);
-
 
     let unidadeOrigem = limparValorCRO(valorCol(row, 'unidadeOrigem'));
     unidadeOrigem = aplicarAliasesSetor(unidadeOrigem, cfg.aliasesSetoresCRO);
@@ -1821,7 +1814,6 @@ function montarPayloadDadosCRO(forcarRefresh) {
       unidadeOrigem || 'Não informado',
       limparValorCRO(valorCol(row, 'comorbidades')),
       dias,
-      idadeOriginal, // Mantendo a string original para preservar a exatidão, já que parseamos em index.html também se precisarmos, ou passamos para parseIdadeEmDias.
       idadeOriginal, // Mantendo a string original para preservar a exatidão, já que parseamos em index.html também se precisarmos, ou passamos para parseIdadeEmDias.
       normalizarTexto(valorCol(row, 'status') || row[3]) || '',
       normalizarProntuarioCRO(prontuario)
