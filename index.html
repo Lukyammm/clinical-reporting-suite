@@ -2682,10 +2682,6 @@
     function renderDocumentoCRO(rel) {
       const tokens = tokensAtuaisCRO(rel);
       const deltaOk = rel.diferencaMeta == null ? true : rel.diferencaMeta >= 0;
-      const permNota = rel.permanencia.media != null
-        ? `<p style="margin:6px 0 0;font-size:11px;color:var(--suave)">Tempo médio de permanência: ${rel.permanencia.media.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} dias (${fmtNum(rel.permanencia.comDado)} óbitos com data).</p>` : '';
-      const comorbNota = rel.comorbidades.comRegistro
-        ? `<p style="margin:6px 0 0;font-size:11px;color:var(--suave)">Base: ${fmtNum(rel.comorbidades.comRegistro)} óbitos com comorbidade registrada. Um óbito pode ter mais de uma comorbidade.</p>` : '';
 
       const pagina1 = `
         <section class="doc-capa">
@@ -2733,15 +2729,13 @@
         <section class="doc-graficos">
           ${caixaGraficoEditavel('obitos_unidade', 'Óbitos por unidade', svgBarrasCRO(rel.porUnidade, { total: rel.total }), true)}
           ${caixaGraficoEditavel('permanencia', 'Tempo de permanência', svgBarrasCRO(rel.permanencia.itens, { total: rel.permanencia.comDado }), true)}
-        </section>
-        ${permNota}`;
+        </section>`;
 
       const pagina3 = `
         <section class="doc-graficos">
           ${caixaGraficoEditavel('origem', 'Unidade de origem', svgBarrasCRO(rel.porOrigem, { total: rel.total, limite: 10 }), true)}
           ${caixaGraficoEditavel('comorbidades', 'Comorbidades mais frequentes', svgBarrasCRO(rel.comorbidades.itens, { total: rel.comorbidades.comRegistro, limite: 12 }), true)}
-        </section>
-        ${comorbNota}`;
+        </section>`;
 
       const paginasNovosGraficos = [
         `<section class="doc-graficos">
