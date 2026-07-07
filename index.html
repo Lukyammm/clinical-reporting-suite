@@ -326,8 +326,8 @@
     .doc-metrica.metrica-evento .evento-fora { display: block; margin-top: 5px; font-size: 9.2px; font-weight: 800; letter-spacing: .02em; text-transform: none; color: var(--suave); }
     .doc-metrica.metrica-evento .evento-fora i { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #a6b4b6; margin-right: 4px; vertical-align: middle; }
     .doc-legendas { margin: 14px 0 0; }
-    .doc-legendas-titulo { font-size: 8.6px; font-weight: 800; letter-spacing: .08em; color: var(--suave); text-transform: uppercase; margin: 0 0 6px; }
-    .doc-legenda { position: relative; padding: 0 0 0 13px; margin: 0 0 5px; font-size: 9.4px; line-height: 1.42; color: var(--suave); break-inside: avoid; }
+    .doc-legendas-titulo { font-size: 9.6px; font-weight: 800; letter-spacing: .08em; color: var(--suave); text-transform: uppercase; margin: 0 0 6px; }
+    .doc-legenda { position: relative; padding: 0 0 0 13px; margin: 0 0 5px; font-size: 10.6px; line-height: 1.42; color: var(--suave); break-inside: avoid; }
     .doc-legenda:last-child { margin-bottom: 0; }
     .doc-legenda::before { content: ''; position: absolute; left: 1px; top: 4px; width: 5px; height: 5px; border-radius: 50%; background: var(--brand); }
     .doc-legenda b { font-weight: 800; color: var(--tinta); }
@@ -350,7 +350,7 @@
     .doc-secao h3 { margin: 0; font-size: 13px; font-weight: 800; letter-spacing: -.01em; }
     .doc-texto {
       color: #2b3c40;
-      font-size: 10.8px;
+      font-size: 12px;
       line-height: 1.6;
       text-align: justify;
       white-space: pre-wrap;
@@ -383,7 +383,7 @@
     .grafico-caixa h4 { margin: 0 0 6px; font-size: 11px; font-weight: 800; color: var(--suave); text-transform: uppercase; letter-spacing: .06em; }
     .grafico-caixa svg { display: block; width: 100%; height: auto; min-height: 150px; overflow: hidden; }
     .legenda { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; }
-    .legenda span { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; color: var(--suave); }
+    .legenda span { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 700; color: var(--suave); }
     .legenda i { width: 11px; height: 11px; border-radius: 3px; flex: none; box-shadow: 0 0 0 1.5px #fff, 0 0 0 2px rgba(20,40,38,.12); }
 
     .doc-tabela { border: 1px solid var(--linha); border-radius: 9px; overflow: hidden; break-inside: avoid; }
@@ -419,7 +419,7 @@
     .tabela-mapa td.cel-mapa { text-align: center; font-weight: 800; font-variant-numeric: tabular-nums; min-width: 44px; }
     .tabela-mapa .col-spark { width: 96px; padding: 2px 6px; }
     .tabela-mapa svg.spark { display: block; width: 92px; height: 22px; }
-    .legenda-mapa { display: flex; align-items: center; gap: 6px; padding: 7px 9px 2px; flex-wrap: wrap; font-size: 9px; color: var(--suave); }
+    .legenda-mapa { display: flex; align-items: center; gap: 6px; padding: 7px 9px 2px; flex-wrap: wrap; font-size: 10.5px; color: var(--suave); }
     .legenda-mapa .grad-bar { width: 100px; height: 10px; border-radius: 4px; background: linear-gradient(to right, #b42318, #b45709, #15803d); display: inline-block; vertical-align: middle; margin-right: 2px; }
     /* Anexos: tabelas longas (1 linha por indicador) compactadas para caberem
        em uma única folha A4 sem vazar para a seguinte. */
@@ -1158,7 +1158,9 @@
       const meses = [...state.sel.meses].sort((a, b) => (MES_ORDEM[a] || 99) - (MES_ORDEM[b] || 99));
       if (!anos.length && !meses.length) return periodoRangeTexto(rel && rel.evolucao);
       const txtAnos = anos.length ? anos.sort().join(', ') : 'todos os anos';
-      const txtMeses = meses.length ? meses.join(', ') : 'todos os meses';
+      const txtMeses = meses.length
+        ? (meses.length >= 3 ? `${meses[0]} até ${meses[meses.length - 1]}` : meses.join(', '))
+        : 'todos os meses';
       return `${txtMeses} de ${txtAnos}`;
     }
 
@@ -2270,7 +2272,7 @@
 
       const totalBase = opcoes.total != null ? opcoes.total : (!isMedia ? itens.reduce((s, i) => s + i.valor, 0) : null);
       const maxValor = Math.max(1, ...lista.map(i => i.valor));
-      const W = 520, linhaAlt = 25, gap = 9, padX = 2, rotuloW = 148, valorW = 86;
+      const W = 520, linhaAlt = 25, gap = 9, padX = 2, rotuloW = 148, valorW = 140;
       const x0 = rotuloW;
       const larguraBarra = W - rotuloW - valorW - padX;
       const barH = linhaAlt - 9;
@@ -2581,13 +2583,15 @@
       const anos = [...state.sel.anosCRO];
       const mesesRaw = [...state.sel.mesesCRO];
       // Se há chaves de "ano mes" (quando múltiplos anos selecionados), extrair apenas os meses
-      const meses = mesesRaw.map(m => {
+      const meses = [...new Set(mesesRaw.map(m => {
         const partes = m.split(' ');
         return partes.length > 1 ? partes[1] : m; // Se contém espaço, pegar a segunda parte (mês)
-      }).sort(ordenarMes);
+      }))].sort(ordenarMes);
       if (!anos.length && !meses.length) return periodoRangeTexto(rel && rel.evolucao);
       const txtAnos = anos.length ? anos.sort().join(', ') : 'todos os anos';
-      const txtMeses = meses.length ? meses.join(', ') : 'todos os meses';
+      const txtMeses = meses.length
+        ? (meses.length >= 3 ? `${meses[0]} até ${meses[meses.length - 1]}` : meses.join(', '))
+        : 'todos os meses';
       return `${txtMeses} de ${txtAnos}`;
     }
     function tokensAtuaisCRO(rel) {
@@ -2625,7 +2629,7 @@
       const fonteChave = `graf_fonte_${idGrafico}`;
 
       return `<div class="grafico-caixa"${full ? ' style="grid-column: 1 / -1"' : ''}>
-          <div class="doc-texto" contenteditable="true" spellcheck="true" data-texto="${preTextoChave}" data-default="" style="margin-bottom: 8px; font-size: 10px; min-height: 14px;" placeholder="Insira texto antes do gráfico aqui (opcional)..."></div>
+          <div class="doc-texto" contenteditable="true" spellcheck="true" data-texto="${preTextoChave}" data-default="" style="margin-bottom: 8px; min-height: 14px;" placeholder="Insira texto antes do gráfico aqui (opcional)..."></div>
           <h4 class="doc-texto" contenteditable="true" spellcheck="true" data-texto="${titleChave}" data-default="${esc(tituloPadrao)}" style="margin: 0 0 6px; font-size: 11px; font-weight: 800; color: var(--suave); text-transform: uppercase; letter-spacing: .06em; min-height: 14px;"></h4>
           ${conteudo}
           <div class="doc-texto" contenteditable="true" spellcheck="true" data-texto="${fonteChave}" data-default="Fonte: Relatório Institucional." style="margin-top: 8px; font-size: 8px; color: var(--suave); text-align: left; min-height: 12px;"></div>

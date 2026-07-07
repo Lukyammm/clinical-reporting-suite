@@ -1612,6 +1612,11 @@ function faixaEtariaCRO(valorIdade, valorFaixa) {
   if (!faixa) return 'Não informado';
   const norm = normalizarTexto(faixa);
   if (norm === '<= 19 ANOS' || norm === '<=19 ANOS' || norm === '< 20 ANOS') return 'Não informado';
+  // A base ainda traz o bucket antigo "< 1 ANO" (sem os dias exatos para
+  // diferenciar recém-nascido de lactente); mapeia para o bucket novo mais
+  // próximo, já que "0 A 28 DIAS" ficaria super-específico sem essa
+  // granularidade.
+  if (/^<\s*1\s*ANO$|^MENOR (DE |QUE )?1\s*ANO$|^MENOR DE UM ANO$/.test(norm)) return '29 DIAS A 24 MESES';
   return faixa;
 }
 
