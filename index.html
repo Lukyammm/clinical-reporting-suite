@@ -555,6 +555,7 @@
 
     /* ===== Impressão: só o documento, em A4 exato ===== */
     @media print {
+      .doc-texto:empty { display: none !important; }
       @page { size: A4 portrait; margin: 0; }
       html, body { width: 210mm; background: #fff !important; }
       /* Navegadores descartam cores de fundo na impressão por padrão. Sem

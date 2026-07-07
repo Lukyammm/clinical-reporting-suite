@@ -264,9 +264,11 @@ function normalizarAno(valor) {
   return String(valor == null ? '' : valor).trim();
 }
 
+/* ============================================================
    CONFIGURAÇÃO SELF-SERVICE DO RELATÓRIO
    A configuração editável vive na aba CRP_REL_CONFIG da própria
    planilha. Script Properties é apenas espelho técnico/fallback.
+   ============================================================ */
 const CONFIG_REL_PROP_KEY = 'CRP_REL_CONFIG_V1';
 const CONFIG_REL_BOOTSTRAP_PROP_KEY = 'CRP_REL_CONFIG_SPREADSHEET_ID';
 const CONFIG_REL_ADMINS_PROP_KEY = 'CRP_REL_ADMINS';
