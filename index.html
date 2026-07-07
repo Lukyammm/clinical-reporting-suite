@@ -414,6 +414,8 @@
     .tabela-mapa th.col-ind, .tabela-mapa td.col-ind { position: sticky; left: 0; z-index: 2; text-align: left; max-width: 168px; white-space: normal; background: #f4f7f6; font-weight: 700; color: var(--tinta); border-right: 1.5px solid var(--linha); }
     .tabela-mapa thead th.col-ind { z-index: 3; }
     .tabela-mapa th.col-mes { font-size: 8.6px; min-width: 44px; text-align: center; }
+    .tabela-heatmap-vert th.col-mes { writing-mode: vertical-rl; transform: rotate(180deg); padding: 8px 4px; min-width: 24px; text-align: left; }
+    .tabela-heatmap-vert td.cel-mapa { min-width: 24px; padding: 4px 2px; }
     .tabela-mapa td.cel-mapa { text-align: center; font-weight: 800; font-variant-numeric: tabular-nums; min-width: 44px; }
     .tabela-mapa .col-spark { width: 96px; padding: 2px 6px; }
     .tabela-mapa svg.spark { display: block; width: 92px; height: 22px; }
@@ -2346,7 +2348,7 @@
 
       return blocos.map((blocoLinhas, idx) => {
           const nota = blocos.length > 1 ? `<span class="doc-secao-nota">parte ${idx + 1}/${blocos.length}</span>` : '';
-          const tabela = `<div class="doc-tabela tabela-mapa"><table>
+          const tabela = `<div class="doc-tabela tabela-mapa tabela-heatmap-vert"><table>
             <thead><tr><th class="col-ind">Unidade</th>${cabMeses}</tr></thead>
             <tbody>${blocoLinhas.join('')}</tbody></table>
             ${idx === blocos.length - 1 ? `<div class="legenda-mapa"><span class="grad-bar" style="background: linear-gradient(to right, rgb(255,255,255), rgb(255,0,0));border: 1px solid #ccc;"></span><span>Maior tempo de permanência</span></div>` : ''}
