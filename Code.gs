@@ -1355,6 +1355,7 @@ function obterDadosRelatorio(opcoes) {
   return executarRota('rpc-dados', () => montarPayloadDados(Boolean(opcoes && opcoes.refresh)));
 }
 
+/* ============================================================
    RELATÓRIO CRO — Comissão de Revisão de Óbitos
    ------------------------------------------------------------
    Diferente da CRP (conformidade de itens do prontuário), a CRO
