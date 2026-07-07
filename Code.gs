@@ -33,6 +33,10 @@ const PLANILHAS = {
 const ABA_RELATORIO_CRP = 'BASE_DADOS(NÃOEDITAR)';
 const ABA_RELATORIO_CRO = 'CRO';
 const ABA_CRO_MORTALIDADE_INST = 'TX_MORTALIDADE_INST';
+// Plano de ação da CRO agora mora em aba própria "PONTOS SISTÊMICOS"
+// (antes era lido da TX_MORTALIDADE_INST). A TX_MORTALIDADE_INST continua
+// sendo a fonte da taxa de mortalidade institucional — não confundir.
+const ABA_CRO_PONTOS_SISTEMICOS = 'PONTOS SISTÊMICOS';
 const FUSO_HORARIO = 'America/Fortaleza';
 const META_INSTITUCIONAL = 80;
 const LOGO_PADRAO = 'https://i.ibb.co/cSNG26sz/oie-transparent.png';
@@ -1284,16 +1288,142 @@ function obterPlanoDeAcaoDados(ss) {
   }
 }
 
-// Plano de ação da CRO: mesma lógica da CRP, mas mora na aba
-// TX_MORTALIDADE_INST (não existe aba "Plano de Ação" própria da CRO).
+// Abreviações/nomes de mês PT-BR → número. A leitura casa pelos 3 primeiros
+// caracteres normalizados (sem acento), o que cobre "ABR" e "ABRIL",
+// "MAR"/"MARÇO" etc. — todos os 12 meses têm 3 primeiras letras distintas.
+const MESES_ABREV_CRO = {
+  JAN: 1, FEV: 2, MAR: 3, ABR: 4, MAI: 5, JUN: 6,
+  JUL: 7, AGO: 8, SET: 9, OUT: 10, NOV: 11, DEZ: 12
+};
+const MESES_NOME_CRO = {
+  1: 'Janeiro', 2: 'Fevereiro', 3: 'Março', 4: 'Abril', 5: 'Maio', 6: 'Junho',
+  7: 'Julho', 8: 'Agosto', 9: 'Setembro', 10: 'Outubro', 11: 'Novembro', 12: 'Dezembro'
+};
+
+// Interpreta o texto da coluna MÊS (col A) da aba PONTOS SISTÊMICOS, que
+// agrupa cada bloco de ações por um par de meses consecutivos próprios da
+// CRO — ex.: "ABR 25;MAI 25" ou, na virada de ano, "DEZ 25;JAN 26".
+//
+// CUIDADO com o ano: meses se repetem TODO ano, então cada token carrega o
+// seu próprio ano de 2 dígitos e nunca agrupamos por mês sozinho — a chave
+// do bloco inclui sempre o ano. Se um token vier sem ano, ele é inferido do
+// vizinho pela direção do calendário (DEZ→JAN vira o ano). Retorna
+// { meses:[{mes,ano},...], chave, rotulo } ou null se não parsear.
+function parseBlocoMesCRO(texto) {
+  const bruto = String(texto == null ? '' : texto).trim();
+  if (!bruto) return null;
+
+  const tokens = bruto.split(/[;\/\n]+/).map(t => t.trim()).filter(Boolean);
+  const parciais = []; // { mes, ano|null }
+  tokens.forEach(tok => {
+    const norm = normalizarTexto(tok).normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const mMes = norm.match(/[A-Z]{3,}/);
+    if (!mMes) return;
+    const mes = MESES_ABREV_CRO[mMes[0].slice(0, 3)];
+    if (!mes) return;
+    const mAno = norm.match(/\d{2,4}/);
+    let ano = null;
+    if (mAno) { const n = Number(mAno[0]); ano = n < 100 ? 2000 + n : n; }
+    parciais.push({ mes, ano });
+  });
+
+  if (!parciais.length || !parciais.some(p => p.ano != null)) return null;
+
+  // Preenche anos faltantes usando a regra de meses consecutivos: se o mês
+  // é "menor" que o vizinho anterior (DEZ→JAN), pertence ao ano seguinte.
+  for (let i = 0; i < parciais.length; i++) {
+    if (parciais[i].ano != null) continue;
+    if (i > 0 && parciais[i - 1].ano != null) {
+      const ant = parciais[i - 1];
+      parciais[i].ano = parciais[i].mes < ant.mes ? ant.ano + 1 : ant.ano;
+    } else if (i < parciais.length - 1 && parciais[i + 1].ano != null) {
+      const prox = parciais[i + 1];
+      parciais[i].ano = parciais[i].mes > prox.mes ? prox.ano - 1 : prox.ano;
+    }
+  }
+
+  const meses = parciais.filter(p => p.ano != null);
+  if (!meses.length) return null;
+
+  const chave = meses.map(p => p.ano + '-' + p.mes).join('|');
+  const a = meses[0], b = meses[meses.length - 1];
+  let rotulo;
+  if (meses.length === 1) {
+    rotulo = `${MESES_NOME_CRO[a.mes]} ${a.ano}`;
+  } else if (a.ano === b.ano) {
+    rotulo = `${MESES_NOME_CRO[a.mes]} — ${MESES_NOME_CRO[b.mes]} ${a.ano}`;
+  } else {
+    rotulo = `${MESES_NOME_CRO[a.mes]} ${a.ano} — ${MESES_NOME_CRO[b.mes]} ${b.ano}`;
+  }
+  return { meses, chave, rotulo };
+}
+
+// Lê a aba PONTOS SISTÊMICOS: col A = mês do bloco (célula mesclada — só a
+// 1ª linha traz o texto; as seguintes herdam), col D = ação, col E =
+// responsável. Ignora Objetivo Estratégico (C), Prazo (F) e Status (G).
+// Cada ação carrega os DOIS meses do seu bloco (com ano), pra o front-end
+// agrupar/filtrar por par (ano, mês).
+function lerPontosSistemicosCRO(sh) {
+  const ultimaLinha = Math.max(sh.getLastRow(), 1);
+  const totalCols = Math.max(sh.getLastColumn(), 5);
+  const values = sh.getRange(1, 1, ultimaLinha, totalCols).getValues();
+
+  const acoes = [];
+  let blocoAtual = null;
+  let blocosVistos = 0;
+  let semBloco = 0;
+
+  for (let i = 0; i < values.length; i++) {
+    const row = values[i];
+    const colMes = row[0];                            // A = mês do bloco
+    const colAcao = row.length > 3 ? row[3] : '';     // D = ação
+    const colResp = row.length > 4 ? row[4] : '';     // E = responsável
+
+    // Coluna A com texto marca fronteira de bloco. Mesclada: linhas de
+    // continuação vêm vazias e herdam o bloco vigente. Texto que não parseia
+    // (ex.: cabeçalho "MÊS") zera o bloco pra não colar ação no lugar errado.
+    if (colMes != null && String(colMes).trim() !== '') {
+      const parsed = parseBlocoMesCRO(colMes);
+      blocoAtual = parsed;
+      if (parsed) blocosVistos++;
+    }
+
+    const acao = String(colAcao == null ? '' : colAcao).trim();
+    if (!acao) continue;
+    const acaoNorm = normalizarTexto(acao);
+    if (acaoNorm === 'AÇÃO' || acaoNorm === 'ACAO' || acaoNorm === 'AÇÕES' || acaoNorm === 'ACOES') continue;
+
+    if (!blocoAtual) { semBloco++; continue; }
+
+    acoes.push({
+      acao,
+      responsavel: String(colResp == null ? '' : colResp).trim(),
+      meses: blocoAtual.meses,
+      blocoChave: blocoAtual.chave,
+      blocoRotulo: blocoAtual.rotulo
+    });
+  }
+
+  const debug = `PONTOS SISTÊMICOS | linhas:${ultimaLinha} | blocos:${blocosVistos} | ações:${acoes.length}` +
+    (semBloco ? ` | ações sem bloco (ignoradas):${semBloco}` : '');
+  return { sucesso: true, acoes, debug };
+}
+
+// Plano de ação da CRO: aba própria "PONTOS SISTÊMICOS". Diferente da CRP —
+// não reaproveita lerPlanoDeAcaoDaAba (formato/colunas distintos).
 function obterPlanoDeAcaoDadosCRO(ss) {
   try {
-    const sh = ss.getSheetByName(ABA_CRO_MORTALIDADE_INST);
+    let sh = ss.getSheetByName(ABA_CRO_PONTOS_SISTEMICOS);
+    if (!sh) {
+      // Tolera variação de acento/espaço no nome da aba.
+      const alvo = normalizarCabecalho(ABA_CRO_PONTOS_SISTEMICOS);
+      sh = ss.getSheets().filter(s => normalizarCabecalho(s.getName()) === alvo)[0] || null;
+    }
     if (!sh) {
       const abas = ss.getSheets().map(s => s.getName()).join(', ');
-      return { sucesso: false, acoes: [], debug: `Aba "${ABA_CRO_MORTALIDADE_INST}" não encontrada. Abas disponíveis: ` + abas };
+      return { sucesso: false, acoes: [], debug: `Aba "${ABA_CRO_PONTOS_SISTEMICOS}" não encontrada. Abas disponíveis: ` + abas };
     }
-    return lerPlanoDeAcaoDaAba(sh, 10); // coluna K
+    return lerPontosSistemicosCRO(sh);
   } catch (e) {
     return { sucesso: false, acoes: [], debug: 'Erro: ' + String(e.message || e) };
   }
