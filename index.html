@@ -3170,6 +3170,25 @@
       }).map(valor => ({ valor, qtd: contagem[valor] }));
     }
 
+    function filtroOpcaoSelecionada(id, valor) {
+      const sel = state.sel[id];
+      if (!sel || !sel.size) return false;
+      if (sel.has(valor)) return true;
+      if (!filtroEhMes(id)) return false;
+      const partes = String(valor || '').split(' ');
+      const mes = partes.length === 2 && /^\d{4}$/.test(partes[0]) ? partes[1] : valor;
+      return sel.has(mes);
+    }
+
+    function removerOpcaoFiltro(id, valor) {
+      const sel = state.sel[id];
+      if (!sel) return;
+      sel.delete(valor);
+      if (!filtroEhMes(id)) return;
+      const partes = String(valor || '').split(' ');
+      if (partes.length === 2 && /^\d{4}$/.test(partes[0])) sel.delete(partes[1]);
+    }
+
     function renderListaFiltro(id, consulta = '') {
       const filtro = document.querySelector(`.filtro[data-filtro="${id}"]`);
       if (!filtro) return;
@@ -3185,14 +3204,14 @@
         const textoExibicao = isFiltroMes ? formatarValorFiltroMes(o.valor) : o.valor;
         return `
         <label class="filtro-opcao">
-          <input type="checkbox" value="${esc(o.valor)}" ${state.sel[id].has(o.valor) ? 'checked' : ''}>
+          <input type="checkbox" value="${esc(o.valor)}" ${filtroOpcaoSelecionada(id, o.valor) ? 'checked' : ''}>
           <span class="texto">${esc(textoExibicao)}</span>
           <span class="qtd">${fmtNum(o.qtd)}</span>
         </label>`;
       }).join('') : '<div style="padding:10px;text-align:center;font-size:12px;color:var(--suave)">Nenhuma opção</div>';
       lista.querySelectorAll('input').forEach(input => input.addEventListener('change', () => {
         if (input.checked) state.sel[id].add(input.value);
-        else state.sel[id].delete(input.value);
+        else removerOpcaoFiltro(id, input.value);
         aoMudarFiltro();
         renderListaFiltro(id, q);
       }));
