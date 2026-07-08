@@ -1075,24 +1075,48 @@
     }
 
     /* ================= Filtro e agregação (100% no navegador) ================= */
+    function filtroEhMes(id) {
+      return id === 'mesesCRO' || id === 'meses';
+    }
+
+    function chaveAnoDoFiltroMes(id) {
+      return id === 'mesesCRO' ? 'anosCRO' : 'anos';
+    }
+
+    function idxAnoDoFiltroMes(id) {
+      return id === 'mesesCRO' ? RC.ano : R.ano;
+    }
+
+    function chaveAnoMesRegistro(f, r) {
+      return `${r[idxAnoDoFiltroMes(f.id)]} ${r[f.idx]}`;
+    }
+
+    function usarChaveAnoMes(id) {
+      const chaveAnos = chaveAnoDoFiltroMes(id);
+      return filtroEhMes(id) && ((state.sel[chaveAnos] && state.sel[chaveAnos].size) || 0) > 1;
+    }
+
+    function valorOpcaoFiltro(f, r) {
+      return usarChaveAnoMes(f.id) ? chaveAnoMesRegistro(f, r) : r[f.idx];
+    }
+
+    function registroAtendeFiltro(f, r, sel) {
+      if (!filtroEhMes(f.id)) return sel.has(r[f.idx]);
+      const valorMes = r[f.idx];
+      const valorAnoMes = chaveAnoMesRegistro(f, r);
+      // Aceita os dois formatos para manter o recorte estável quando o usuário
+      // muda a seleção de anos depois de marcar meses. A UI pode alternar entre
+      // "Janeiro" e "2025 Janeiro", mas o filtro continua coerente.
+      return sel.has(valorMes) || sel.has(valorAnoMes);
+    }
+
     function registrosFiltrados(ignorarId) {
       const regs = state.dados ? state.dados.base.registros : [];
       return regs.filter(r => FILTROS.every(f => {
         if (f.id === ignorarId) return true;
         const sel = state.sel[f.id];
         if (!sel.size) return true;
-
-        // Para filtros de mês, quando há múltiplos anos selecionados, comparar com chave ano+mês
-        const isFiltroMes = f.id === 'mesesCRO' || f.id === 'meses';
-        const chaveAnos = f.id === 'mesesCRO' ? 'anosCRO' : 'anos';
-        const anosSelCount = state.sel[chaveAnos]?.size || 0;
-
-        if (isFiltroMes && anosSelCount > 1) {
-          const chaveRegistro = r[f.id === 'mesesCRO' ? RC.ano : R.ano] + ' ' + r[f.idx];
-          return sel.has(chaveRegistro);
-        }
-
-        return sel.has(r[f.idx]);
+        return registroAtendeFiltro(f, r, sel);
       }));
     }
 
@@ -3030,7 +3054,11 @@
         filtro.querySelectorAll('[data-acao]').forEach(btn => btn.addEventListener('click', () => {
           if (btn.dataset.acao === 'tudo') {
             const def = FILTROS.find(f => f.id === id);
-            state.sel[id] = new Set(registrosFiltrados(id).map(r => r[def.idx]));
+            // Usa exatamente as opções facetadas renderizadas pelo filtro. Isso é
+            // essencial para o filtro de mês: com mais de um ano selecionado, o
+            // valor interno vira "ano + mês" (ex.: "2025 Janeiro") para não
+            // misturar Janeiro/2025 com Janeiro/2026.
+            state.sel[id] = new Set(opcoesFiltro(def).map(o => o.valor));
           } else {
             state.sel[id] = new Set();
           }
@@ -3067,19 +3095,11 @@
       const base = registrosFiltrados(def.id);
       const contagem = {};
 
-      // Para filtros de mês, quando há múltiplos anos selecionados, criar chaves ano+mês
-      const isFiltroMes = def.id === 'mesesCRO' || def.id === 'meses';
-      const chaveAnos = def.id === 'mesesCRO' ? 'anosCRO' : 'anos';
-      const anosSelCount = state.sel[chaveAnos]?.size || 0;
-      const usarChaveAnomeses = isFiltroMes && anosSelCount > 1;
+      // Para filtros de mês, quando há múltiplos anos selecionados, criar chaves ano+mês.
+      const usarChaveAnomeses = usarChaveAnoMes(def.id);
 
       base.forEach(r => {
-        let chave;
-        if (usarChaveAnomeses) {
-          chave = r[def.id === 'mesesCRO' ? RC.ano : R.ano] + ' ' + r[def.idx];
-        } else {
-          chave = r[def.idx];
-        }
+        const chave = valorOpcaoFiltro(def, r);
         contagem[chave] = (contagem[chave] || 0) + 1;
       });
 
@@ -3257,7 +3277,7 @@
         construirFiltros();
         // Limpa seleções que deixaram de existir na base carregada.
         filtrosAtuais().forEach(def => {
-          const validos = new Set(state.dados.base.registros.map(r => r[def.idx]));
+          const validos = new Set(opcoesFiltro(def).map(o => o.valor));
           state.sel[def.id] = new Set([...state.sel[def.id]].filter(v => validos.has(v)));
         });
         renderTudo();
