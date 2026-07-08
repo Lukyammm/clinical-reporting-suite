@@ -1193,24 +1193,33 @@
     // "todos os meses de todos os anos" mostramos o intervalo real dos dados:
     // "de {primeiro} a {último}", detectado a partir da evolução mensal já
     // calculada no relatório.
-    function periodoRangeTexto(evolucao) {
-      const rotulo = e => `${String(e.mes).slice(0, 3)}/${String(e.ano).slice(-2)}`;
-      const pts = (evolucao || []).filter(e => e.ano && e.mes && e.ano !== 'Não informado' && e.mes !== 'Não informado');
+    function periodoRangeTexto(evolucao, opcoes) {
+      opcoes = opcoes || {};
+      const formato = opcoes.formato || 'curto';
+      const pts = (evolucao || [])
+        .filter(e => e.ano && e.mes && e.ano !== 'Não informado' && e.mes !== 'Não informado' && MES_ORDEM[e.mes])
+        .slice()
+        .sort(compararPeriodo);
       if (!pts.length) return 'todos os meses de todos os anos';
       const primeiro = pts[0], ultimo = pts[pts.length - 1];
-      return (primeiro.ano === ultimo.ano && primeiro.mes === ultimo.mes)
-        ? rotulo(primeiro)
-        : `de ${rotulo(primeiro)} a ${rotulo(ultimo)}`;
+      const mesmoPeriodo = primeiro.ano === ultimo.ano && primeiro.mes === ultimo.mes;
+      if (formato === 'longo') {
+        if (mesmoPeriodo) return `${primeiro.mes} de ${primeiro.ano}`;
+        return primeiro.ano === ultimo.ano
+          ? `${primeiro.mes} até ${ultimo.mes} de ${primeiro.ano}`
+          : `${primeiro.mes} de ${primeiro.ano} até ${ultimo.mes} de ${ultimo.ano}`;
+      }
+      const rotulo = e => `${String(e.mes).slice(0, 3)}/${String(e.ano).slice(-2)}`;
+      return mesmoPeriodo ? rotulo(primeiro) : `de ${rotulo(primeiro)} a ${rotulo(ultimo)}`;
     }
     function periodoTexto(rel) {
       const anos = [...state.sel.anos];
-      const meses = [...state.sel.meses].sort((a, b) => (MES_ORDEM[a] || 99) - (MES_ORDEM[b] || 99));
+      const meses = [...state.sel.meses];
       if (!anos.length && !meses.length) return periodoRangeTexto(rel && rel.evolucao);
-      const txtAnos = anos.length ? anos.sort().join(', ') : 'todos os anos';
-      const txtMeses = meses.length
-        ? (meses.length >= 3 ? `${meses[0]} até ${meses[meses.length - 1]}` : meses.join(', '))
-        : 'todos os meses';
-      return `${txtMeses} de ${txtAnos}`;
+      // O cabeçalho deve refletir o intervalo real do recorte filtrado. Montar o
+      // texto separando meses e anos gera rótulos ambíguos em seleções não
+      // contínuas ou com múltiplos anos, como "Janeiro até Dezembro de 2025, 2026".
+      return periodoRangeTexto(rel && rel.evolucao, { formato: 'longo' });
     }
 
     function tokensAtuais(rel) {
@@ -2680,18 +2689,11 @@
     /* ===== Tokens e textos da CRO ===== */
     function periodoTextoCRO(rel) {
       const anos = [...state.sel.anosCRO];
-      const mesesRaw = [...state.sel.mesesCRO];
-      // Se há chaves de "ano mes" (quando múltiplos anos selecionados), extrair apenas os meses
-      const meses = [...new Set(mesesRaw.map(m => {
-        const partes = m.split(' ');
-        return partes.length > 1 ? partes[1] : m; // Se contém espaço, pegar a segunda parte (mês)
-      }))].sort(ordenarMes);
+      const meses = [...state.sel.mesesCRO];
       if (!anos.length && !meses.length) return periodoRangeTexto(rel && rel.evolucao);
-      const txtAnos = anos.length ? anos.sort().join(', ') : 'todos os anos';
-      const txtMeses = meses.length
-        ? (meses.length >= 3 ? `${meses[0]} até ${meses[meses.length - 1]}` : meses.join(', '))
-        : 'todos os meses';
-      return `${txtMeses} de ${txtAnos}`;
+      // Usa a evolução já filtrada para mostrar somente a primeira e a última
+      // competência reais do recorte, sem misturar meses de um ano com anos de outro.
+      return periodoRangeTexto(rel && rel.evolucao, { formato: 'longo' });
     }
     function tokensAtuaisCRO(rel) {
       const unidadeTop = rel.porUnidade[0];
