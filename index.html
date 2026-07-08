@@ -575,12 +575,25 @@
     .setores-aba.ativa { background: var(--papel); color: var(--brand); box-shadow: 0 1px 2px rgba(16,32,30,.08); }
     .setores-cont { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--brand-claro); color: var(--brand); font-size: 10.5px; font-weight: 800; }
     .setores-aba:not(.ativa) .setores-cont { background: #e7edec; color: var(--suave); }
+    .setores-toolbar { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 8px; align-items: center; }
     .setores-busca { min-height: 34px; }
+    .setores-mergebar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; border: 1px solid #b7d7d3; border-radius: 12px; background: linear-gradient(135deg, #eefaf8, #ffffff); }
+    .setores-mergebar strong { display: block; font-size: 12.5px; color: var(--brand-escuro); }
+    .setores-mergebar span { display: block; font-size: 11.5px; color: var(--suave); }
+    .setores-mergebar .botao { min-height: 32px; padding: 5px 10px; }
+    .setores-historico { display: grid; gap: 6px; padding: 10px 12px; border: 1px dashed #c8d8d6; border-radius: 12px; background: #fbfdfd; }
+    .setores-historico h3 { margin: 0; font-size: 12px; color: var(--brand-escuro); }
+    .setores-historico-lista { display: grid; gap: 5px; max-height: 96px; overflow: auto; }
+    .setores-historico-item { display: flex; gap: 6px; align-items: flex-start; font-size: 11.5px; color: var(--suave); }
+    .setores-historico-item b { color: var(--tinta); }
+    .setores-historico-item code { font: inherit; padding: 1px 6px; border-radius: 999px; background: var(--brand-claro); color: var(--brand-escuro); font-weight: 700; }
     .setores-estado { display: flex; align-items: center; gap: 8px; padding: 14px; font-size: 12px; color: var(--suave); background: var(--fundo); border-radius: 9px; }
     .setores-estado.erro { color: #8a3b2f; background: #fbeae7; }
     .setores-lista { display: grid; gap: 6px; max-height: 340px; overflow: auto; padding: 2px; }
     .setores-lista.vazia { place-items: center; padding: 18px; color: var(--suave); font-size: 12px; }
-    .setor-linha { display: grid; grid-template-columns: minmax(0,1fr) 16px minmax(0,1fr); align-items: center; gap: 8px; padding: 5px 8px; border: 1px solid var(--linha); border-radius: 9px; background: var(--papel); }
+    .setor-linha { display: grid; grid-template-columns: 24px minmax(0,1fr) 16px minmax(0,1fr); align-items: center; gap: 8px; padding: 7px 9px; border: 1px solid var(--linha); border-radius: 10px; background: var(--papel); transition: border-color .15s ease, background .15s ease, box-shadow .15s ease; }
+    .setor-linha:has(.setor-check:checked) { border-color: var(--brand); background: #f0fbf9; box-shadow: 0 0 0 2px rgba(15,118,110,.08); }
+    .setor-check { width: 16px; height: 16px; accent-color: var(--brand); }
     .setor-linha.filtrado { display: none; }
     .setor-linha.mapeado { border-color: var(--brand); background: linear-gradient(0deg, var(--brand-claro), var(--papel)); }
     .setor-origem { min-width: 0; font-size: 12px; font-weight: 600; color: var(--tinta); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -589,7 +602,9 @@
     .setor-alvo { min-height: 32px; font-size: 12px; padding: 5px 9px; }
     .setor-alvo::placeholder { color: #b3c0c2; }
     @media (max-width: 520px) {
-      .setor-linha { grid-template-columns: 1fr; gap: 4px; }
+      .setores-toolbar { grid-template-columns: 1fr; }
+      .setor-linha { grid-template-columns: 24px 1fr; gap: 4px; }
+      .setor-alvo { grid-column: 1 / -1; }
       .setor-seta { display: none; }
     }
 
@@ -788,7 +803,18 @@
               <button type="button" class="setores-aba ativa" data-aba="crp" role="tab">CRP<span class="setores-cont" id="adm-setores-crp-cont"></span></button>
               <button type="button" class="setores-aba" data-aba="cro" role="tab">CRO<span class="setores-cont" id="adm-setores-cro-cont"></span></button>
             </div>
-            <input type="search" class="entrada setores-busca" id="adm-setores-busca" placeholder="Filtrar setores…" autocomplete="off">
+            <div class="setores-toolbar">
+              <input type="search" class="entrada setores-busca" id="adm-setores-busca" placeholder="Filtrar setores…" autocomplete="off">
+              <button type="button" class="botao primario" id="adm-setores-juntar" disabled>Juntar selecionados</button>
+            </div>
+            <div class="setores-mergebar" id="adm-setores-mergebar">
+              <div><strong id="adm-setores-selecionados">Nenhum setor selecionado</strong><span>Selecione setores parecidos e clique em “Juntar” para atribuir todos a um único nome.</span></div>
+              <button type="button" class="botao" id="adm-setores-limpar" disabled>Limpar seleção</button>
+            </div>
+            <div class="setores-historico oculto" id="adm-setores-historico">
+              <h3>Histórico de junções configuradas</h3>
+              <div class="setores-historico-lista" id="adm-setores-historico-lista"></div>
+            </div>
             <div id="adm-setores-estado" class="setores-estado"><span class="spinner" aria-hidden="true"></span><span>Carregando setores das bases…</span></div>
             <div class="setores-lista oculto" id="adm-setores-crp" data-comissao="crp"></div>
             <div class="setores-lista oculto" id="adm-setores-cro" data-comissao="cro"></div>
@@ -812,6 +838,19 @@
       </div>
     </div>
   </aside>
+
+  <div class="veu oculto" id="setores-merge-veu" role="dialog" aria-modal="true" aria-labelledby="setores-merge-titulo">
+    <div class="dialogo">
+      <h3 id="setores-merge-titulo">Juntar setores selecionados</h3>
+      <p>Todos os setores selecionados serão exibidos como um único setor no relatório. Os nomes antigos ficam preservados como histórico da junção.</p>
+      <div class="campo" style="margin-bottom:12px"><label for="setores-merge-nome">Nome final do setor</label><input class="entrada" type="text" id="setores-merge-nome" placeholder="Ex.: UTI Adulto"></div>
+      <div class="setores-historico" style="margin-bottom:14px"><h3>Setores que serão juntados</h3><div class="setores-historico-lista" id="setores-merge-lista"></div></div>
+      <div class="dialogo-acoes">
+        <button class="botao" type="button" id="setores-merge-cancelar">Cancelar</button>
+        <button class="botao primario" type="button" id="setores-merge-confirmar">Juntar</button>
+      </div>
+    </div>
+  </div>
 
   <script>
     'use strict';
@@ -906,7 +945,8 @@
       adminCfg: null,              // última config recebida (p/ re-render de setores)
       setoresBrutos: null,         // { crp:[], cro:[] } lidos das bases
       setoresRender: { crp: false, cro: false }, // lista renderizada com sucesso?
-      setoresAba: 'crp'            // aba ativa na gestão de setores
+      setoresAba: 'crp',           // aba ativa na gestão de setores
+      setoresMergeSelecionados: []  // seleção atual no modal de junção
     };
     FILTROS_CRP.concat(FILTROS_CRO).forEach(f => { state.sel[f.id] = new Set(); });
     CHAVES_TEXTO_TODAS.forEach(k => { state.textos[k] = { manual: false, valor: '' }; });
@@ -3428,6 +3468,11 @@
     /* ===== Gestão de setores ===== */
     // Normaliza igual ao backend (normalizarTexto): sem espaços extras, maiúsculo.
     function normSetor(s) { return String(s == null ? '' : s).trim().replace(/\s+/g, ' ').toUpperCase(); }
+    function nomePadraoSetor(nomes) {
+      const limpos = (nomes || []).map(n => String(n || '').trim()).filter(Boolean);
+      if (!limpos.length) return '';
+      return limpos.slice().sort((a, b) => a.length - b.length || a.localeCompare(b, 'pt-BR'))[0];
+    }
 
     // Converte as linhas de alias ("apelido1, apelido2 = Nome Correto") num mapa
     // normRaw -> { alvo, original }.
@@ -3513,21 +3558,26 @@
         el.innerHTML = itens.map(it => {
           const badge = it.naBase ? '' : `<span class="setor-ausente" title="Não aparece na base atual">fora da base</span>`;
           const mapeado = it.alvo && normSetor(it.alvo) !== it.norm ? ' mapeado' : '';
-          return `<div class="setor-linha${mapeado}" data-busca="${esc((it.nome + ' ' + it.alvo).toLowerCase())}">
+          return `<label class="setor-linha${mapeado}" data-busca="${esc((it.nome + ' ' + it.alvo).toLowerCase())}">
+            <input class="setor-check" type="checkbox" data-comissao="${com}" data-origem="${esc(it.nome)}"${podeEditar ? '' : ' disabled'}>
             <div class="setor-origem" title="${esc(it.nome)}">${esc(it.nome)}${badge}</div>
             <span class="setor-seta" aria-hidden="true">→</span>
             <input class="entrada setor-alvo" type="text" data-comissao="${com}" data-origem="${esc(it.nome)}" value="${esc(it.alvo)}" placeholder="${esc(it.nome)}"${podeEditar ? '' : ' disabled'}>
-          </div>`;
+          </label>`;
         }).join('');
       }
       if (cont) cont.textContent = String(itens.length);
       state.setoresRender[com] = true;
+      atualizarResumoMergeSetores();
+      renderHistoricoSetores();
     }
 
     function ativarAbaSetor(com) {
       state.setoresAba = com;
       document.querySelectorAll('.setores-aba').forEach(b => b.classList.toggle('ativa', b.dataset.aba === com));
       ['crp', 'cro'].forEach(c => { const l = $('adm-setores-' + c); if (l) l.classList.toggle('oculto', c !== com); });
+      atualizarResumoMergeSetores();
+      renderHistoricoSetores();
     }
 
     function aplicarFiltroSetores() {
@@ -3538,6 +3588,82 @@
         const bate = !termo || (linha.dataset.busca || '').indexOf(termo) !== -1;
         linha.classList.toggle('filtrado', !bate);
       });
+    }
+
+    function setoresSelecionados(com) {
+      return Array.from(document.querySelectorAll(`#adm-setores-${com} .setor-check:checked`)).map(chk => String(chk.dataset.origem || '').trim()).filter(Boolean);
+    }
+
+    function atualizarResumoMergeSetores() {
+      const selecionados = setoresSelecionados(state.setoresAba);
+      const txt = $('adm-setores-selecionados');
+      const btnJuntar = $('adm-setores-juntar');
+      const btnLimpar = $('adm-setores-limpar');
+      if (txt) txt.textContent = selecionados.length ? `${selecionados.length} setor(es) selecionado(s)` : 'Nenhum setor selecionado';
+      if (btnJuntar) btnJuntar.disabled = !state.adminPodeEditar || selecionados.length < 2;
+      if (btnLimpar) btnLimpar.disabled = selecionados.length === 0;
+    }
+
+    function limparSelecaoSetores() {
+      document.querySelectorAll(`#adm-setores-${state.setoresAba} .setor-check:checked`).forEach(chk => { chk.checked = false; });
+      atualizarResumoMergeSetores();
+    }
+
+    function abrirMergeSetores() {
+      const selecionados = setoresSelecionados(state.setoresAba);
+      if (selecionados.length < 2) { toast('Selecione pelo menos 2 setores para juntar.', 'alerta', 'Setores'); return; }
+      state.setoresMergeSelecionados = selecionados;
+      const nome = $('setores-merge-nome');
+      const lista = $('setores-merge-lista');
+      if (nome) { nome.value = nomePadraoSetor(selecionados); setTimeout(() => nome.focus(), 30); }
+      if (lista) lista.innerHTML = selecionados.map(s => `<div class="setores-historico-item"><span aria-hidden="true">•</span><b>${esc(s)}</b></div>`).join('');
+      $('setores-merge-veu').classList.remove('oculto');
+    }
+
+    function fecharMergeSetores() {
+      $('setores-merge-veu').classList.add('oculto');
+      state.setoresMergeSelecionados = [];
+    }
+
+    function confirmarMergeSetores() {
+      const nomeFinal = String(($('setores-merge-nome') || {}).value || '').trim();
+      const selecionados = state.setoresMergeSelecionados || [];
+      if (!nomeFinal) { toast('Informe o nome final do setor.', 'alerta', 'Setores'); return; }
+      if (selecionados.length < 2) return fecharMergeSetores();
+      selecionados.forEach(origem => {
+        const inp = document.querySelector(`#adm-setores-${state.setoresAba} .setor-alvo[data-origem="${cssEsc(origem)}"]`);
+        if (inp) {
+          inp.value = nomeFinal;
+          const linha = inp.closest('.setor-linha');
+          if (linha) {
+            linha.classList.toggle('mapeado', normSetor(nomeFinal) !== normSetor(origem));
+            linha.dataset.busca = `${origem} ${nomeFinal}`.toLowerCase();
+          }
+        }
+      });
+      fecharMergeSetores();
+      limparSelecaoSetores();
+      renderHistoricoSetores();
+      toast('Junção preparada. Clique em Salvar para gravar a configuração.', 'sucesso', 'Setores');
+    }
+
+    function renderHistoricoSetores() {
+      const box = $('adm-setores-historico');
+      const lista = $('adm-setores-historico-lista');
+      if (!box || !lista) return;
+      const aliases = coletarAliasesSetores(state.setoresAba);
+      box.classList.toggle('oculto', !aliases.length);
+      lista.innerHTML = aliases.map(linha => {
+        const partes = linha.split('=');
+        const origem = (partes[0] || '').trim();
+        const alvo = (partes[1] || '').trim();
+        return `<div class="setores-historico-item"><span>Histórico:</span><b>${esc(origem)}</b><span>→</span><code>${esc(alvo)}</code></div>`;
+      }).join('');
+    }
+
+    function cssEsc(valor) {
+      if (window.CSS && CSS.escape) return CSS.escape(valor);
+      return String(valor).replace(/[\"\\]/g, '\\$&');
     }
 
     // Lê os inputs de uma comissão e monta as linhas de alias. Setores com o
@@ -3643,6 +3769,9 @@
       ['adm-setores-crp', 'adm-setores-cro'].forEach(id => {
         const lista = $(id);
         if (!lista) return;
+        lista.addEventListener('change', ev => {
+          if (ev.target.closest('.setor-check')) atualizarResumoMergeSetores();
+        });
         lista.addEventListener('input', ev => {
           const inp = ev.target.closest('.setor-alvo');
           if (!inp) return;
@@ -3650,8 +3779,20 @@
           const alvo = String(inp.value || '').trim();
           const origem = String(inp.dataset.origem || '');
           linha.classList.toggle('mapeado', !!alvo && normSetor(alvo) !== normSetor(origem));
+          linha.dataset.busca = `${origem} ${alvo}`.toLowerCase();
+          renderHistoricoSetores();
         });
       });
+      const btnJuntar = $('adm-setores-juntar');
+      if (btnJuntar) btnJuntar.addEventListener('click', abrirMergeSetores);
+      const btnLimpar = $('adm-setores-limpar');
+      if (btnLimpar) btnLimpar.addEventListener('click', limparSelecaoSetores);
+      const mergeCancelar = $('setores-merge-cancelar');
+      if (mergeCancelar) mergeCancelar.addEventListener('click', fecharMergeSetores);
+      const mergeConfirmar = $('setores-merge-confirmar');
+      if (mergeConfirmar) mergeConfirmar.addEventListener('click', confirmarMergeSetores);
+      const mergeVeu = $('setores-merge-veu');
+      if (mergeVeu) mergeVeu.addEventListener('click', ev => { if (ev.target === mergeVeu) fecharMergeSetores(); });
     }
 
     // Guarda o markup original do resumo da CRP antes de qualquer troca de tema.
