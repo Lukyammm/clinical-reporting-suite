@@ -2234,6 +2234,10 @@
     //   1) Divide qualquer grupo de gráficos (.doc-graficos) que sozinho passe
     //      do orçamento em várias seções .doc-graficos menores — cada gráfico
     //      vira uma unidade que pode ir para outra folha.
+    //   1b) Se sobrar só uma seção com tabela grande (plano de ação/ações —
+    //       cujas linhas de texto livre podem quebrar em várias linhas
+    //       visuais e estourar a estimativa fixa de linhas por folha usada na
+    //       montagem inicial), divide por grupos de linhas presas por rowspan.
     //   2) Move os blocos que ainda sobram para uma nova folha própria, com
     //      cabeçalho e rodapé idênticos aos das demais.
     // No fim renumera todas as folhas. É chamada após o texto editável ser
@@ -2281,6 +2285,87 @@
         return PAGINA_H - headerH - footerH - (GAP_PAGINA * 2);
       };
 
+      // Divide uma .doc-secao cujo conteúdo é (principalmente) uma tabela alta
+      // demais para uma folha — ex.: "Plano de ação"/"Ações planejadas", cujas
+      // linhas têm texto livre que pode quebrar em várias linhas visuais e
+      // estourar a estimativa fixa de linhas por folha (ROWS_INLINE/CONT_*)
+      // usada na montagem inicial. Diferente de dividirGraficos, aqui a
+      // unidade que não pode ser cortada no meio é um GRUPO de linhas presas
+      // por rowspan (a célula "Período" cobre várias ações do mesmo bimestre).
+      // Sem essa divisão, a seção inteira ficava como filho único do corpo — o
+      // caso que o passo 2 já não sabe dividir — e transbordava sem
+      // cabeçalho/rodapé na folha de continuação (o bug das páginas 15/16).
+      function dividirTabela(sec, orcamento) {
+        const secaoCab = sec.querySelector('.doc-secao-cab');
+        const wrap = sec.querySelector('.doc-tabela');
+        const table = wrap && wrap.querySelector('table');
+        const thead = table && table.querySelector('thead');
+        const tbody = table && table.querySelector('tbody');
+        if (!wrap || !table || !tbody || tbody.children.length <= 1) return [sec];
+
+        const linhas = Array.from(tbody.children);
+        const grupos = [];
+        let idx = 0;
+        while (idx < linhas.length) {
+          const tr = linhas[idx];
+          const tdSpan = tr.querySelector('td[rowspan]');
+          const span = tdSpan ? Math.max(1, parseInt(tdSpan.getAttribute('rowspan'), 10) || 1) : 1;
+          grupos.push(linhas.slice(idx, idx + span));
+          idx += span;
+        }
+        if (grupos.length <= 1) return [sec];
+
+        // Filhos da seção que não são cabeçalho nem tabela (ex.: texto editável
+        // do plano de ação) — ficam só na primeira parte, como no original.
+        const outros = Array.from(sec.children).filter(c => c !== secaoCab && c !== wrap);
+        const cabH = secaoCab ? alturaDe(secaoCab) : 0;
+        const outrosH = outros.reduce((s, el) => s + alturaDe(el), 0);
+        const theadH = thead ? alturaDe(thead) : 0;
+        const alturaGrupo = g => g.reduce((s, tr) => s + alturaDe(tr), 0);
+
+        const partes = [];
+        let atual = [];
+        let alturaAtual = cabH + outrosH + theadH;
+        grupos.forEach(g => {
+          const gh = alturaGrupo(g);
+          if (atual.length && alturaAtual + gh > orcamento) {
+            partes.push(atual);
+            atual = [];
+            alturaAtual = cabH + theadH; // continuação: sem "outros" (só na 1ª parte)
+          }
+          atual.push(g);
+          alturaAtual += gh;
+        });
+        if (atual.length) partes.push(atual);
+        if (partes.length <= 1) return [sec];
+
+        const total = partes.length;
+        return partes.map((grupo, pi) => {
+          const novaSec = sec.cloneNode(false);
+          if (secaoCab) {
+            const cabClone = secaoCab.cloneNode(true);
+            let nota = cabClone.querySelector('.doc-secao-nota');
+            if (!nota) {
+              nota = document.createElement('span');
+              nota.className = 'doc-secao-nota';
+              cabClone.appendChild(nota);
+            }
+            nota.textContent = `parte ${pi + 1}/${total}`;
+            novaSec.appendChild(cabClone);
+          }
+          if (pi === 0) outros.forEach(el => novaSec.appendChild(el)); // move — preserva contenteditable
+          const novoWrap = wrap.cloneNode(false);
+          const novaTabela = table.cloneNode(false);
+          if (thead) novaTabela.appendChild(thead.cloneNode(true));
+          const novoTbody = document.createElement('tbody');
+          grupo.forEach(g => g.forEach(tr => novoTbody.appendChild(tr))); // move as linhas reais
+          novaTabela.appendChild(novoTbody);
+          novoWrap.appendChild(novaTabela);
+          novaSec.appendChild(novoWrap);
+          return novaSec;
+        });
+      }
+
       let paginas = Array.from(doc.children).filter(el => el.classList.contains('pagina'));
       let i = 0, iteracoes = 0;
       const LIMITE_ITERACOES = 4000;
@@ -2305,6 +2390,20 @@
             }
           }
         });
+
+        // Passo 1b: se sobrou só uma seção com tabela grande demais (o caso
+        // mais comum de estouro — plano de ação/ações com texto longo nas
+        // células), divide por grupos de linhas antes de desistir.
+        if (corpo.children.length === 1 && alturaDe(corpo) > orcamento) {
+          const unico = corpo.children[0];
+          if (unico.classList.contains('doc-secao') && unico.querySelector('.doc-tabela table')) {
+            const partes = dividirTabela(unico, orcamento);
+            if (partes.length > 1) {
+              partes.forEach(p => corpo.insertBefore(p, unico));
+              corpo.removeChild(unico);
+            }
+          }
+        }
 
         const corpoH = alturaDe(corpo);
         if (corpoH <= orcamento + 1) { i++; continue; }
