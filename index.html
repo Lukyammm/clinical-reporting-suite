@@ -2265,10 +2265,7 @@
       if (t.indexOf('JUSTIFIC') !== -1 || t.indexOf('INEVIT') !== -1 || t.indexOf('EVITAVEL') !== -1) return 'justificado';
       return '';
     }
-    function distribuicaoSimples(regs, idx, ordenarPorOrdem) {
-      const mapa = {};
-      regs.forEach(r => { const v = r[idx] || 'Não informado'; mapa[v] = (mapa[v] || 0) + 1; });
-      let itens = Object.keys(mapa).map(rotulo => ({ rotulo, valor: mapa[rotulo] }));
+    function ordenarDistribuicao(itens, ordenarPorOrdem) {
       if (ordenarPorOrdem) {
         itens.sort((a, b) => {
           const ia = ordenarPorOrdem.indexOf(a.rotulo), ib = ordenarPorOrdem.indexOf(b.rotulo);
@@ -2278,6 +2275,23 @@
         itens.sort((a, b) => b.valor - a.valor || a.rotulo.localeCompare(b.rotulo, 'pt-BR'));
       }
       return itens;
+    }
+    function distribuicaoSimples(regs, idx, ordenarPorOrdem) {
+      const mapa = {};
+      regs.forEach(r => { const v = r[idx] || 'Não informado'; mapa[v] = (mapa[v] || 0) + 1; });
+      return ordenarDistribuicao(Object.keys(mapa).map(rotulo => ({ rotulo, valor: mapa[rotulo] })), ordenarPorOrdem);
+    }
+    function normalizarSexoCROCliente(valor) {
+      const t = normTxt(valor);
+      if (t === 'F' || t.indexOf('FEM') === 0) return 'Feminino';
+      if (t === 'M' || t.indexOf('MASC') === 0) return 'Masculino';
+      return 'Não informado';
+    }
+    function distribuicaoSexoCRO(regs) {
+      const ordem = ['Feminino', 'Masculino', 'Não informado'];
+      const mapa = { Feminino: 0, Masculino: 0, 'Não informado': 0 };
+      regs.forEach(r => { const sexo = normalizarSexoCROCliente(r[RC.sexo]); mapa[sexo] = (mapa[sexo] || 0) + 1; });
+      return ordenarDistribuicao(ordem.map(rotulo => ({ rotulo, valor: mapa[rotulo] })).filter(it => it.valor > 0), ordem);
     }
 
     function distribuicaoComorbidades(regs) {
@@ -2414,7 +2428,7 @@
         evolucao,
         mortalidadeInstitucional: mortalidadeInstitucionalFiltrada(),
         porUnidade: distribuicaoSimples(regs, RC.unidade),
-        porSexo: distribuicaoSimples(regs, RC.sexo),
+        porSexo: distribuicaoSexoCRO(regs),
         porFaixa: distribuicaoSimples(regs, RC.faixa, FAIXA_ETARIA_ORDEM),
         porMacro: distribuicaoSimples(regs, RC.macro),
         porOrigem: distribuicaoSimples(regs, RC.origem),
@@ -2540,7 +2554,8 @@
     // Pizza com legenda lateral — usado para distribuições de poucas categorias (ex: sexo).
     function svgPizzaCRO(itens, opcoes) {
       opcoes = opcoes || {};
-      const lista = itens.filter(it => it.rotulo !== 'Não informado' && it.valor > 0);
+      const incluirNaoInformado = opcoes.incluirNaoInformado === true;
+      const lista = itens.filter(it => (incluirNaoInformado || it.rotulo !== 'Não informado') && it.valor > 0);
       if (!lista.length) return `<div style="display:grid;place-items:center;height:120px;color:var(--suave);font-size:11px">Sem dados no recorte selecionado.</div>`;
       const total = lista.reduce((s, i) => s + i.valor, 0);
       const cores = ['#0f766e', '#14b8a6', '#5eead4', '#0d9488', '#99f6e4', '#134e4a'];
@@ -2877,7 +2892,7 @@
         ${secaoTexto(1, 'apresentacao')}
         ${secaoTexto(2, 'epidemiologia')}
         <section class="doc-graficos">
-          ${caixaGraficoEditavel('sexo', 'Sexo', svgPizzaCRO(rel.porSexo))}
+          ${caixaGraficoEditavel('sexo', 'Sexo', svgPizzaCRO(rel.porSexo, { incluirNaoInformado: true }))}
           ${caixaGraficoEditavel('faixa', 'Faixa etária', svgBarrasCRO(rel.porFaixa, { total: rel.total }))}
         </section>
         ${alertasEstruturaDoc()}`;
