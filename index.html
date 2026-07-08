@@ -285,6 +285,11 @@
     .pagina + .pagina { margin-top: 16px; }
     .pagina:last-child { break-after: auto; page-break-after: auto; }
     @media (max-width: 1080px) { .pagina { width: 100%; min-height: 0; padding: 22px; } }
+    /* Corpo de cada folha — ver repaginarDocumento(): a divisão automática de
+       conteúdo que ultrapassa uma folha A4 mede a altura desta caixa (e de
+       cada filho direto dela) para decidir onde cortar, então ela precisa ser
+       um seletor estável (classe, não style inline). */
+    .pagina-corpo { display: grid; gap: 11px; }
 
     .doc-cab {
       display: flex;
@@ -2149,6 +2154,9 @@
       const total = corpos.length;
       $('documento').innerHTML = corpos.map((c, i) => montarPagina(tokens, i + 1, total, c)).join('');
       ligarTextosEditaveis(tokens, () => tokensAtuais(agregar(registrosFiltrados())));
+      // Repagina só depois da fonte real carregar — medir com a fonte de
+      // fallback do sistema dava altura errada e reintroduzia o bug.
+      (document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve()).then(repaginarDocumento);
     }
 
     // Conecta as seções editáveis (contenteditable) do documento ao estado.
@@ -2194,7 +2202,88 @@
     }
 
     function montarPagina(tokens, num, total, corpo) {
-      return `<section class="pagina">${cabecalhoDoc(tokens)}<div style="display:grid;gap:11px">${corpo}</div>${rodapeDoc(num)}</section>`;
+      return `<section class="pagina">${cabecalhoDoc(tokens)}<div class="pagina-corpo">${corpo}</div>${rodapeDoc(num)}</section>`;
+    }
+
+    // Repaginação automática: cada seção do relatório é montada assumindo que
+    // "geralmente" cabe numa folha A4, mas alguns blocos (sobretudo os textos
+    // editáveis livres — apresentação, epidemiologia, análise etc.) não têm
+    // tamanho previsível, porque o usuário pode escrever qualquer quantidade
+    // de texto. Quando um desses blocos cresce demais, o conteúdo ULTRAPASSA
+    // a folha e o navegador quebrava a impressão no meio da .pagina — gerando
+    // folha em branco, gráfico cortado ou tabela sem cabeçalho/rodapé (ver
+    // captura de tela do bug reportado).
+    //
+    // Esta função mede (em px, já com a fonte real carregada) a altura de cada
+    // folha já renderizada e, sempre que uma ultrapassa o espaço disponível
+    // (297mm menos as margens e a altura real do cabeçalho/rodapé daquela
+    // folha), move os blocos que sobraram para uma nova folha própria — com
+    // cabeçalho e rodapé idênticos aos das demais e numeração recalculada no
+    // final. É chamada após o texto editável ser preenchido (ligarTextosEditaveis)
+    // e de novo, por segurança, imediatamente antes de imprimir/gerar o PDF.
+    function repaginarDocumento() {
+      const doc = $('documento');
+      if (!doc) return;
+      const MM = 96 / 25.4;             // 1mm em px CSS (fixo, independe do DPI da tela)
+      const PAGE_H = 297 * MM;          // altura útil de uma folha A4
+      const PAD_TOP = 11 * MM;          // ver .pagina{padding} no @media print
+      const PAD_BOTTOM = 11 * MM;
+      const GAP_VERTICAL = 11;          // .pagina{gap:11px} entre cabeçalho/corpo/rodapé
+
+      let paginas = Array.from(doc.children).filter(el => el.classList.contains('pagina'));
+      let i = 0;
+      let iteracoes = 0;
+      const LIMITE_ITERACOES = 2000;
+
+      while (i < paginas.length && iteracoes < LIMITE_ITERACOES) {
+        iteracoes++;
+        const pagina = paginas[i];
+        const header = pagina.querySelector('.doc-cab');
+        const footer = pagina.querySelector('.doc-rodape');
+        const corpo = pagina.querySelector('.pagina-corpo');
+        if (!corpo || !corpo.children.length) { i++; continue; }
+
+        const headerH = header ? header.getBoundingClientRect().height : 0;
+        const footerH = footer ? footer.getBoundingClientRect().height : 0;
+        const orcamento = PAGE_H - PAD_TOP - PAD_BOTTOM - headerH - footerH - (GAP_VERTICAL * 2);
+        const corpoH = corpo.getBoundingClientRect().height;
+        if (corpoH <= orcamento + 1) { i++; continue; }
+
+        const filhos = Array.from(corpo.children);
+        if (filhos.length <= 1) { i++; continue; } // bloco único gigante: sem como dividir sem quebrar o conteúdo
+
+        let acumulado = 0;
+        let corte = filhos.length;
+        for (let k = 0; k < filhos.length; k++) {
+          const altura = filhos[k].getBoundingClientRect().height;
+          const gap = k > 0 ? GAP_VERTICAL : 0;
+          if (acumulado + gap + altura > orcamento) { corte = k; break; }
+          acumulado += gap + altura;
+        }
+        if (corte === 0) corte = 1; // garante progresso: nunca deixa a página vazia
+        const restantes = filhos.slice(corte);
+        if (!restantes.length) { i++; continue; }
+
+        const novaPagina = document.createElement('section');
+        novaPagina.className = 'pagina';
+        if (header) novaPagina.appendChild(header.cloneNode(true));
+        const novoCorpo = document.createElement('div');
+        novoCorpo.className = 'pagina-corpo';
+        restantes.forEach(el => novoCorpo.appendChild(el)); // move (não clona) — preserva contenteditable e listeners
+        novaPagina.appendChild(novoCorpo);
+        if (footer) novaPagina.appendChild(footer.cloneNode(true));
+
+        pagina.parentNode.insertBefore(novaPagina, pagina.nextSibling);
+        paginas.splice(i + 1, 0, novaPagina);
+        i++; // a folha atual já cabe; a nova folha é conferida na próxima volta
+      }
+
+      paginas = Array.from(doc.children).filter(el => el.classList.contains('pagina'));
+      paginas.forEach((p, idx) => {
+        const footer = p.querySelector('.doc-rodape');
+        const span = footer && footer.lastElementChild;
+        if (span) span.textContent = `Página ${idx + 1}`;
+      });
     }
 
     function marcarEdicao(chave, editado) {
@@ -3030,6 +3119,9 @@
       const total = corpos.length;
       $('documento').innerHTML = corpos.map((c, i) => montarPagina(tokens, i + 1, total, c)).join('');
       ligarTextosEditaveis(tokens, () => tokensAtuaisCRO(agregarCRO(registrosFiltrados())));
+      // Repagina só depois da fonte real carregar — medir com a fonte de
+      // fallback do sistema dava altura errada e reintroduzia o bug.
+      (document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve()).then(repaginarDocumento);
     }
 
     /* ===== Resumo lateral da CRO ===== */
@@ -3378,6 +3470,7 @@
       botao.innerHTML = '<span class="spinner" aria-hidden="true"></span><span>Abrindo…</span>';
       try {
         if (document.fonts && document.fonts.ready) { try { await document.fonts.ready; } catch (_) {} }
+        repaginarDocumento();
         window.print();
         toast('Na janela de impressão, escolha "Salvar como PDF" (margens: Nenhuma) para gerar o arquivo.', 'info', 'PDF');
       } catch (erro) {
@@ -3768,7 +3861,11 @@
     /* ================= Inicialização ================= */
     function ligarEventos() {
       $('btn-atualizar').addEventListener('click', () => iniciar(true));
-      $('btn-imprimir').addEventListener('click', () => window.print());
+      $('btn-imprimir').addEventListener('click', async () => {
+        if (document.fonts && document.fonts.ready) { try { await document.fonts.ready; } catch (_) {} }
+        repaginarDocumento();
+        window.print();
+      });
       $('btn-pdf').addEventListener('click', ev => baixarPdf(ev.currentTarget));
       $('btn-limpar').addEventListener('click', () => {
         FILTROS.forEach(f => { state.sel[f.id] = new Set(); });
