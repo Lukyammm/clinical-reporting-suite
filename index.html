@@ -555,6 +555,44 @@
     .item-indicador span { display: grid; place-items: center; min-height: 34px; border-radius: 7px; background: #e7edec; font-size: 11px; font-weight: 800; color: var(--suave); }
     .admin-bloqueio { border: 1px solid #f2d399; background: #fdf6e7; color: #8a5a08; border-radius: 9px; padding: 10px 12px; font-size: 12.5px; font-weight: 600; }
 
+    /* ===== Refresh visual do painel de administração ===== */
+    .admin-cab { padding: 16px 20px; background: linear-gradient(180deg, var(--papel), var(--fundo)); border-bottom: 1px solid var(--linha); }
+    .admin-cab h2 { font-size: 16px; letter-spacing: -.01em; color: var(--tinta); }
+    .admin-cab p { font-size: 12px; }
+    .admin-corpo { padding: 18px 20px; gap: 16px; background: var(--fundo); }
+    .admin-painel .cartao { border-radius: 14px; box-shadow: 0 1px 2px rgba(16,32,30,.04); }
+    .admin-painel .cartao-cab { padding: 14px 16px 0; }
+    .admin-painel .cartao-cab h2 { position: relative; padding-left: 11px; font-size: 12.5px; color: var(--brand); }
+    .admin-painel .cartao-cab h2::before { content: ''; position: absolute; left: 0; top: 1px; bottom: 1px; width: 3px; border-radius: 2px; background: var(--brand); }
+    .admin-painel .cartao-corpo { padding: 12px 16px 16px; gap: 12px; }
+    .admin-pe { padding: 14px 20px; box-shadow: 0 -2px 10px rgba(16,32,30,.05); }
+    .admin-pe .botao.primario { min-width: 108px; }
+
+    /* ===== Gestão de setores ===== */
+    .setores-abas { display: inline-flex; gap: 4px; padding: 4px; background: var(--fundo); border: 1px solid var(--linha); border-radius: 10px; }
+    .setores-aba { display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; padding: 6px 14px; border-radius: 7px; font-size: 12.5px; font-weight: 700; color: var(--suave); cursor: pointer; transition: background .15s, color .15s; }
+    .setores-aba:hover { color: var(--tinta); }
+    .setores-aba.ativa { background: var(--papel); color: var(--brand); box-shadow: 0 1px 2px rgba(16,32,30,.08); }
+    .setores-cont { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--brand-claro); color: var(--brand); font-size: 10.5px; font-weight: 800; }
+    .setores-aba:not(.ativa) .setores-cont { background: #e7edec; color: var(--suave); }
+    .setores-busca { min-height: 34px; }
+    .setores-estado { display: flex; align-items: center; gap: 8px; padding: 14px; font-size: 12px; color: var(--suave); background: var(--fundo); border-radius: 9px; }
+    .setores-estado.erro { color: #8a3b2f; background: #fbeae7; }
+    .setores-lista { display: grid; gap: 6px; max-height: 340px; overflow: auto; padding: 2px; }
+    .setores-lista.vazia { place-items: center; padding: 18px; color: var(--suave); font-size: 12px; }
+    .setor-linha { display: grid; grid-template-columns: minmax(0,1fr) 16px minmax(0,1fr); align-items: center; gap: 8px; padding: 5px 8px; border: 1px solid var(--linha); border-radius: 9px; background: var(--papel); }
+    .setor-linha.filtrado { display: none; }
+    .setor-linha.mapeado { border-color: var(--brand); background: linear-gradient(0deg, var(--brand-claro), var(--papel)); }
+    .setor-origem { min-width: 0; font-size: 12px; font-weight: 600; color: var(--tinta); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .setor-origem .setor-ausente { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 8px; background: #fbeecf; color: #8a5a08; font-size: 9.5px; font-weight: 800; vertical-align: middle; }
+    .setor-seta { display: grid; place-items: center; color: #9aabae; font-size: 13px; }
+    .setor-alvo { min-height: 32px; font-size: 12px; padding: 5px 9px; }
+    .setor-alvo::placeholder { color: #b3c0c2; }
+    @media (max-width: 520px) {
+      .setor-linha { grid-template-columns: 1fr; gap: 4px; }
+      .setor-seta { display: none; }
+    }
+
     /* ===== Impressão: só o documento, em A4 exato ===== */
     @media print {
       .doc-texto:empty { display: none !important; }
@@ -743,10 +781,17 @@
           </div>
         </section>
         <section class="cartao">
-          <div class="cartao-cab"><h2>Aliases de setores (CRO)</h2></div>
+          <div class="cartao-cab"><h2>Gestão de setores</h2></div>
           <div class="cartao-corpo">
-            <div class="nota-comissao">Mapeamento para corrigir nomes de setores divergentes na base. Formato: `Apelido1, Apelido2 = Nome Correto`. Ex: `UTIP, UTI PEDIATRICA = UTI PEDIÁTRICA`. Um mapeamento por linha.</div>
-            <div class="campo"><label for="adm-aliases-cro">Aliases de setores</label><textarea class="areatexto" id="adm-aliases-cro" rows="3"></textarea></div>
+            <div class="nota-comissao">Escolha como cada setor aparece no relatório. Deixe em branco para manter o nome original da base. Dois ou mais setores com o mesmo <strong>nome exibido</strong> são unificados num só (ex.: <em>UTI - ADULTO 3</em> e <em>UTI ADULTO III</em> → <em>UTI - Adulto III</em>).</div>
+            <div class="setores-abas" role="tablist" aria-label="Comissão">
+              <button type="button" class="setores-aba ativa" data-aba="crp" role="tab">CRP<span class="setores-cont" id="adm-setores-crp-cont"></span></button>
+              <button type="button" class="setores-aba" data-aba="cro" role="tab">CRO<span class="setores-cont" id="adm-setores-cro-cont"></span></button>
+            </div>
+            <input type="search" class="entrada setores-busca" id="adm-setores-busca" placeholder="Filtrar setores…" autocomplete="off">
+            <div id="adm-setores-estado" class="setores-estado"><span class="spinner" aria-hidden="true"></span><span>Carregando setores das bases…</span></div>
+            <div class="setores-lista oculto" id="adm-setores-crp" data-comissao="crp"></div>
+            <div class="setores-lista oculto" id="adm-setores-cro" data-comissao="cro"></div>
           </div>
         </section>
         <section class="cartao">
@@ -857,7 +902,11 @@
       ocupado: false,
       cargaSeq: 0,
       adminCarregado: false,
-      adminPodeEditar: true
+      adminPodeEditar: true,
+      adminCfg: null,              // última config recebida (p/ re-render de setores)
+      setoresBrutos: null,         // { crp:[], cro:[] } lidos das bases
+      setoresRender: { crp: false, cro: false }, // lista renderizada com sucesso?
+      setoresAba: 'crp'            // aba ativa na gestão de setores
     };
     FILTROS_CRP.concat(FILTROS_CRO).forEach(f => { state.sel[f.id] = new Set(); });
     CHAVES_TEXTO_TODAS.forEach(k => { state.textos[k] = { manual: false, valor: '' }; });
@@ -3252,12 +3301,14 @@
           if (metodo === 'get') r.obterConfigRelAdmin(arg === true);
           else if (metodo === 'save') r.salvarConfigRelAdmin(arg);
           else if (metodo === 'reset') r.restaurarConfigRelAdmin();
+          else if (metodo === 'setores') r.obterSetoresBrutosAdmin();
           return;
         }
-        if (metodo === 'get') {
-          const query = arg ? '?api=configrel&refresh=1' : '?api=configrel';
+        if (metodo === 'get' || metodo === 'setores') {
+          const rota = metodo === 'setores' ? 'setores' : 'configrel';
+          const query = (arg && metodo === 'get') ? `?api=${rota}&refresh=1` : `?api=${rota}`;
           fetch(`${APP_URL || location.pathname}${query}`, { cache: 'no-store' })
-            .then(r => r.ok ? r.json() : Promise.reject(new Error('Falha ao carregar a configuração.')))
+            .then(r => r.ok ? r.json() : Promise.reject(new Error('Falha ao carregar dados da configuração.')))
             .then(resolve).catch(reject);
         } else {
           reject(new Error('Salvar exige o app publicado no Apps Script (google.script.run).'));
@@ -3291,6 +3342,7 @@
         $('admin-form').classList.remove('oculto');
         $('admin-bloqueio').classList.toggle('oculto', state.adminPodeEditar);
         if (refresh) toast('Configurações recarregadas da planilha.', 'sucesso', 'Admin');
+        carregarSetoresAdmin(refresh === true);   // lê os setores das bases em paralelo
       } catch (erro) {
         state.adminCarregado = false;
         estado.innerHTML = `<span aria-hidden="true">⚠</span><span>${esc(erro.message || 'Não foi possível carregar as configurações.')}</span>`;
@@ -3311,7 +3363,8 @@
       set('adm-conforme', (cfg.termosConforme || []).join('\n'));
       set('adm-naoconforme', (cfg.termosNaoConforme || []).join('\n'));
       set('adm-naoaplica', (cfg.termosNaoSeAplica || []).join('\n'));
-      set('adm-aliases-cro', (cfg.aliasesSetoresCRO || []).join('\n'));
+      state.adminCfg = cfg;
+      if (state.setoresBrutos) renderSetores();   // já temos as bases: re-renderiza com os aliases novos
       $('adm-indicadores').innerHTML = (cfg.indicadores || []).map((nome, i) =>
         `<div class="item-indicador"><span>${i + 1}</span><input type="text" class="entrada adm-ind" value="${esc(String(nome || ''))}"></div>`).join('');
       $('admin-info').innerHTML = cfg.atualizadoEm
@@ -3327,7 +3380,7 @@
       const linhas = id => val(id).split('\n').map(s => s.trim()).filter(Boolean);
       const textos = {};
       CHAVES_TEXTO.forEach(k => { textos[k] = val(`adm-texto-${k}`); });
-      return {
+      const payload = {
         metaInstitucional: Number(val('adm-meta')),
         abaNome: val('adm-aba').trim(),
         planilhaId: val('adm-planilha').trim(),
@@ -3340,9 +3393,146 @@
         termosConforme: linhas('adm-conforme'),
         termosNaoConforme: linhas('adm-naoconforme'),
         termosNaoSeAplica: linhas('adm-naoaplica'),
-        aliasesSetoresCRO: linhas('adm-aliases-cro'),
         indicadores: Array.from(document.querySelectorAll('#adm-indicadores .adm-ind')).map(i => i.value)
       };
+      // Só envia os aliases de cada comissão se a lista de setores foi de fato
+      // renderizada — evita apagar mapeamentos existentes quando a UI de
+      // setores ainda não carregou (ou falhou ao ler a base).
+      if (state.setoresRender.crp) payload.aliasesSetoresCRP = coletarAliasesSetores('crp');
+      if (state.setoresRender.cro) payload.aliasesSetoresCRO = coletarAliasesSetores('cro');
+      return payload;
+    }
+
+    /* ===== Gestão de setores ===== */
+    // Normaliza igual ao backend (normalizarTexto): sem espaços extras, maiúsculo.
+    function normSetor(s) { return String(s == null ? '' : s).trim().replace(/\s+/g, ' ').toUpperCase(); }
+
+    // Converte as linhas de alias ("apelido1, apelido2 = Nome Correto") num mapa
+    // normRaw -> { alvo, original }.
+    function parseAliasLinhas(linhas) {
+      const mapa = {};
+      (linhas || []).forEach(linha => {
+        const partes = String(linha).split('=');
+        if (partes.length !== 2) return;
+        const alvo = partes[1].trim();
+        partes[0].split(',').forEach(raw => {
+          const original = raw.trim();
+          if (original) mapa[normSetor(original)] = { alvo, original };
+        });
+      });
+      return mapa;
+    }
+
+    async function carregarSetoresAdmin(refresh) {
+      const est = $('adm-setores-estado');
+      if (!est) return;
+      // Já temos as bases e não é refresh explícito: só re-renderiza.
+      if (state.setoresBrutos && !refresh) { renderSetores(); return; }
+      est.classList.remove('oculto', 'erro');
+      est.innerHTML = `<span class="spinner" aria-hidden="true"></span><span>Carregando setores das bases…</span>`;
+      ['adm-setores-crp', 'adm-setores-cro'].forEach(id => $(id) && $(id).classList.add('oculto'));
+      try {
+        const resp = await comTimeout(rpcConfig('setores'), 60000, 'A leitura dos setores demorou demais.');
+        if (!resp || resp.success === false) throw new Error((resp && resp.mensagem) || 'Setores indisponíveis.');
+        state.setoresBrutos = { crp: resp.crp || [], cro: resp.cro || [], crpErro: resp.crpErro || '', croErro: resp.croErro || '' };
+        est.classList.add('oculto');
+        renderSetores();
+      } catch (erro) {
+        state.setoresBrutos = null;
+        state.setoresRender.crp = state.setoresRender.cro = false;
+        est.classList.remove('oculto');
+        est.classList.add('erro');
+        est.innerHTML = `<span aria-hidden="true">⚠</span><span>${esc(erro.message || 'Não foi possível carregar os setores.')}</span>`;
+      }
+    }
+
+    function renderSetores() {
+      if (!state.setoresBrutos || !state.adminCfg) return;
+      renderListaSetor('crp');
+      renderListaSetor('cro');
+      ativarAbaSetor(state.setoresAba);
+      aplicarFiltroSetores();
+    }
+
+    function renderListaSetor(com) {
+      const el = $('adm-setores-' + com);
+      const cont = $('adm-setores-' + com + '-cont');
+      if (!el) return;
+      const bruto = state.setoresBrutos || {};
+      const erro = com === 'crp' ? bruto.crpErro : bruto.croErro;
+      const chaveAlias = com === 'crp' ? 'aliasesSetoresCRP' : 'aliasesSetoresCRO';
+      const aliasMap = parseAliasLinhas((state.adminCfg || {})[chaveAlias] || []);
+
+      if (erro) {
+        el.classList.remove('oculto');
+        el.classList.add('vazia');
+        el.innerHTML = `<span>Não foi possível ler a base ${com.toUpperCase()}: ${esc(erro)}</span>`;
+        state.setoresRender[com] = false;
+        if (cont) cont.textContent = '–';
+        return;
+      }
+
+      // União: setores da base + eventuais aliases cujo original não está mais
+      // na base (pra o usuário conseguir ver/editar/remover mesmo assim).
+      const porNorm = {};
+      (bruto[com] || []).forEach(nome => { porNorm[normSetor(nome)] = { nome, naBase: true }; });
+      Object.keys(aliasMap).forEach(k => { if (!porNorm[k]) porNorm[k] = { nome: aliasMap[k].original, naBase: false }; });
+
+      const itens = Object.keys(porNorm)
+        .map(k => ({ norm: k, nome: porNorm[k].nome, naBase: porNorm[k].naBase, alvo: (aliasMap[k] && aliasMap[k].alvo) || '' }))
+        .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+
+      const podeEditar = state.adminPodeEditar;
+      if (!itens.length) {
+        el.classList.add('vazia');
+        el.innerHTML = `<span>Nenhum setor encontrado na base ${com.toUpperCase()}.</span>`;
+      } else {
+        el.classList.remove('vazia');
+        el.innerHTML = itens.map(it => {
+          const badge = it.naBase ? '' : `<span class="setor-ausente" title="Não aparece na base atual">fora da base</span>`;
+          const mapeado = it.alvo && normSetor(it.alvo) !== it.norm ? ' mapeado' : '';
+          return `<div class="setor-linha${mapeado}" data-busca="${esc((it.nome + ' ' + it.alvo).toLowerCase())}">
+            <div class="setor-origem" title="${esc(it.nome)}">${esc(it.nome)}${badge}</div>
+            <span class="setor-seta" aria-hidden="true">→</span>
+            <input class="entrada setor-alvo" type="text" data-comissao="${com}" data-origem="${esc(it.nome)}" value="${esc(it.alvo)}" placeholder="${esc(it.nome)}"${podeEditar ? '' : ' disabled'}>
+          </div>`;
+        }).join('');
+      }
+      if (cont) cont.textContent = String(itens.length);
+      state.setoresRender[com] = true;
+    }
+
+    function ativarAbaSetor(com) {
+      state.setoresAba = com;
+      document.querySelectorAll('.setores-aba').forEach(b => b.classList.toggle('ativa', b.dataset.aba === com));
+      ['crp', 'cro'].forEach(c => { const l = $('adm-setores-' + c); if (l) l.classList.toggle('oculto', c !== com); });
+    }
+
+    function aplicarFiltroSetores() {
+      const termo = normSetor(($('adm-setores-busca') || {}).value || '').toLowerCase();
+      const lista = $('adm-setores-' + state.setoresAba);
+      if (!lista) return;
+      lista.querySelectorAll('.setor-linha').forEach(linha => {
+        const bate = !termo || (linha.dataset.busca || '').indexOf(termo) !== -1;
+        linha.classList.toggle('filtrado', !bate);
+      });
+    }
+
+    // Lê os inputs de uma comissão e monta as linhas de alias. Setores com o
+    // mesmo "nome exibido" viram uma única linha (apelido1, apelido2 = Nome),
+    // que é como aplicarAliasesSetor funde os setores no relatório.
+    function coletarAliasesSetores(com) {
+      const grupos = {};   // alvo -> [origens]
+      const ordem = [];
+      document.querySelectorAll(`#adm-setores-${com} .setor-alvo`).forEach(inp => {
+        const origem = String(inp.dataset.origem || '').trim();
+        const alvo = String(inp.value || '').trim();
+        // Sem valor ou igual ao próprio nome (ignorando caixa/espaços): sem alias.
+        if (!origem || !alvo || normSetor(alvo) === normSetor(origem)) return;
+        if (!grupos[alvo]) { grupos[alvo] = []; ordem.push(alvo); }
+        grupos[alvo].push(origem);
+      });
+      return ordem.map(alvo => `${grupos[alvo].join(', ')} = ${alvo}`);
     }
 
     async function salvarAdmin() {
@@ -3423,6 +3613,23 @@
       $('adm-salvar').addEventListener('click', salvarAdmin);
       $('adm-restaurar').addEventListener('click', restaurarAdmin);
       $('admin-form').addEventListener('submit', ev => { ev.preventDefault(); salvarAdmin(); });
+      document.querySelectorAll('.setores-aba').forEach(b =>
+        b.addEventListener('click', () => { ativarAbaSetor(b.dataset.aba); aplicarFiltroSetores(); }));
+      const buscaSetor = $('adm-setores-busca');
+      if (buscaSetor) buscaSetor.addEventListener('input', aplicarFiltroSetores);
+      // Feedback ao vivo: destaca a linha quando um nome exibido é definido.
+      ['adm-setores-crp', 'adm-setores-cro'].forEach(id => {
+        const lista = $(id);
+        if (!lista) return;
+        lista.addEventListener('input', ev => {
+          const inp = ev.target.closest('.setor-alvo');
+          if (!inp) return;
+          const linha = inp.closest('.setor-linha');
+          const alvo = String(inp.value || '').trim();
+          const origem = String(inp.dataset.origem || '');
+          linha.classList.toggle('mapeado', !!alvo && normSetor(alvo) !== normSetor(origem));
+        });
+      });
     }
 
     // Guarda o markup original do resumo da CRP antes de qualquer troca de tema.

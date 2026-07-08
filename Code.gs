@@ -149,6 +149,10 @@ function doGet(e) {
     return responderJson(obterConfigRelAdmin(params.refresh === '1' || params.refresh === 'true'));
   }
 
+  if (params.api === 'setores') {
+    return responderJson(obterSetoresBrutosAdmin());
+  }
+
   try {
     const template = HtmlService.createTemplateFromFile('index');
     template.appUrl = ScriptApp.getService().getUrl();
@@ -316,6 +320,7 @@ function configPadraoRel() {
       plano: TEXTOS_PADRAO_REL.plano,
       conclusao: TEXTOS_PADRAO_REL.conclusao
     },
+    aliasesSetoresCRP: [],
     atualizadoEm: '',
     atualizadoPor: ''
   };
@@ -508,6 +513,7 @@ function lerConfigRelDaAba(sh, padrao) {
       conclusao: mapa['Mensagem padrão - Conclusão']
     },
     indicadores: lerIndicadoresConfigRel(mapa, padrao),
+    aliasesSetoresCRP: lerListaConfigRel(mapa['Aliases de setores CRP']),
     atualizadoEm: String(mapa['Atualizado em'] || ''),
     atualizadoPor: String(mapa['Atualizado por'] || '')
   };
@@ -541,6 +547,11 @@ function escreverConfigRelNaAba(sh, cfg, observacao) {
   ];
 
   (cfg.indicadores || []).forEach((nome, i) => rows.push([`Indicador ${i + 1}`, nome || '']));
+
+  // Anexado após os indicadores de propósito: a formatação abaixo usa números
+  // de linha fixos (5, 9, 14, 21), então nada pode ser inserido no meio. A
+  // leitura é por rótulo (mapaLinhasConfigRel), então a posição não importa.
+  rows.push(['Aliases de setores CRP', (cfg.aliasesSetoresCRP || []).join('\n')]);
 
   sh.clear();
   sh.getRange(1, 1, rows.length, 2).setValues(rows);
@@ -623,6 +634,11 @@ function mesclarConfigRel(padrao, salvo) {
       if (lista.length) cfg[chave] = lista;
     }
   });
+  // Aliases de setores da CRP: substitui a lista inteira (inclusive por vazia,
+  // pra permitir remover todos os mapeamentos pela tela de administração).
+  if (Array.isArray(salvo.aliasesSetoresCRP)) {
+    cfg.aliasesSetoresCRP = salvo.aliasesSetoresCRP.map(t => String(t || '').trim()).filter(Boolean);
+  }
   cfg.atualizadoEm = salvo.atualizadoEm || '';
   cfg.atualizadoPor = salvo.atualizadoPor || '';
   return cfg;
@@ -636,8 +652,9 @@ function mesclarConfigRelCRO(padrao, salvo) {
   if (salvo.logoUrl != null && String(salvo.logoUrl).trim()) cfg.logoUrl = String(salvo.logoUrl).trim();
   if (salvo.rodapeUrl != null && String(salvo.rodapeUrl).trim()) cfg.rodapeUrl = String(salvo.rodapeUrl).trim();
   if (Array.isArray(salvo.aliasesSetoresCRO)) {
-    const lista = salvo.aliasesSetoresCRO.map(t => String(t || '').trim()).filter(Boolean);
-    if (lista.length) cfg.aliasesSetoresCRO = lista;
+    // Substitui a lista inteira (inclusive por vazia) pra permitir remover
+    // mapeamentos pela tela de administração.
+    cfg.aliasesSetoresCRO = salvo.aliasesSetoresCRO.map(t => String(t || '').trim()).filter(Boolean);
   }
   cfg.atualizadoEm = salvo.atualizadoEm || '';
   cfg.atualizadoPor = salvo.atualizadoPor || '';
@@ -862,6 +879,7 @@ function combinarConfigsRelAdmin(cfgCRP, cfgCRO) {
   cfgCRO = cfgCRO || configPadraoRelCRO();
   combinado.planilhaIdCRO = cfgCRO.planilhaIdCRO || PLANILHAS.relatoriosCRO;
   combinado.abaNomeCRO = cfgCRO.abaNomeCRO || ABA_RELATORIO_CRO;
+  combinado.aliasesSetoresCRP = cfgCRP && cfgCRP.aliasesSetoresCRP || [];
   combinado.aliasesSetoresCRO = cfgCRO.aliasesSetoresCRO || [];
   combinado.atualizadoEmCRO = cfgCRO.atualizadoEm || '';
   combinado.atualizadoPorCRO = cfgCRO.atualizadoPor || '';
@@ -909,6 +927,55 @@ function obterConfigRelAdmin(forcarRefresh) {
       usuario: emailUsuarioAtualRel(),
       geradoEm: carimboAgora()
     };
+  });
+}
+
+// Lista os nomes de setor DISTINTOS e BRUTOS (pré-alias) de cada base, para a
+// tela de gestão de setores. CRP = coluna "Unidade" (G). CRO = união das
+// colunas de unidade do óbito e de unidade de origem. Um erro numa base não
+// impede a outra (retorna crpErro/croErro pra diagnóstico).
+function obterSetoresBrutosAdmin() {
+  return executarRota('rpc-setores-brutos', () => {
+    const resultado = { success: true, crp: [], cro: [], geradoEm: carimboAgora() };
+    const cfgCRP = obterConfigRel(false);
+
+    try {
+      const ssCRP = abrirPlanilhaRelatorio(cfgCRP);
+      const baseCRP = obterLinhasRelatorio(ssCRP, 'CRP', cfgCRP);
+      const setCRP = {};
+      (baseCRP.linhas || []).forEach(row => {
+        const nome = String(row[RELATORIO_CRP_COLUNAS.unidade] == null ? '' : row[RELATORIO_CRP_COLUNAS.unidade]).trim();
+        if (nome) setCRP[nome] = true;
+      });
+      resultado.crp = Object.keys(setCRP).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    } catch (e) {
+      resultado.crpErro = String(e && e.message || e);
+    }
+
+    try {
+      const cfgCRO = obterConfigRelCRO(false, cfgCRP);
+      const id = (cfgCRO.planilhaIdCRO && String(cfgCRO.planilhaIdCRO).trim()) || PLANILHAS.relatoriosCRO || cfgCRP.planilhaId || PLANILHAS.relatorios;
+      const ssCRO = abrirPlanilhaPorIdCache(id, 'do relatório CRO');
+      const shCRO = obterAbaRelatorioCRO(ssCRO, cfgCRO);
+      const setCRO = {};
+      if (shCRO) {
+        const values = shCRO.getDataRange().getValues();
+        const info = mapearColunasCRO(values, Math.min(values.length, 30));
+        const linhaHeader = info.linha;
+        const colUn = info.mapa['unidadeObito'];
+        const colOr = info.mapa['unidadeOrigem'];
+        for (let r = linhaHeader + 1; r < values.length; r++) {
+          const row = values[r];
+          if (colUn != null && colUn >= 0) { const n = limparValorCRO(row[colUn]); if (n) setCRO[n] = true; }
+          if (colOr != null && colOr >= 0) { const n = limparValorCRO(row[colOr]); if (n) setCRO[n] = true; }
+        }
+      }
+      resultado.cro = Object.keys(setCRO).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    } catch (e) {
+      resultado.croErro = String(e && e.message || e);
+    }
+
+    return resultado;
   });
 }
 
@@ -1446,7 +1513,7 @@ function montarPayloadDados(forcarRefresh) {
       normalizarAno(row[col.ano]) || 'Não informado',
       normalizarMes(row[col.mes]) || 'Não informado',
       String(row[col.avaliacaoTerminada] == null ? '' : row[col.avaliacaoTerminada]).trim() || 'Não informado',
-      String(row[col.unidade] == null ? '' : row[col.unidade]).trim() || 'Não informado',
+      aplicarAliasesSetor(String(row[col.unidade] == null ? '' : row[col.unidade]).trim(), cfg.aliasesSetoresCRP) || 'Não informado',
       String(row[col.eixo] == null ? '' : row[col.eixo]).trim() || 'Não informado',
       String(row[col.categoria] == null ? '' : row[col.categoria]).trim() || 'Não informado',
       String(row[col.satisfacao] == null ? '' : row[col.satisfacao]).trim() || 'Não informado',
