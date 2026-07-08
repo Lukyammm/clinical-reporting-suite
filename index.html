@@ -2265,10 +2265,7 @@
       if (t.indexOf('JUSTIFIC') !== -1 || t.indexOf('INEVIT') !== -1 || t.indexOf('EVITAVEL') !== -1) return 'justificado';
       return '';
     }
-    function distribuicaoSimples(regs, idx, ordenarPorOrdem) {
-      const mapa = {};
-      regs.forEach(r => { const v = r[idx] || 'Não informado'; mapa[v] = (mapa[v] || 0) + 1; });
-      let itens = Object.keys(mapa).map(rotulo => ({ rotulo, valor: mapa[rotulo] }));
+    function ordenarDistribuicao(itens, ordenarPorOrdem) {
       if (ordenarPorOrdem) {
         itens.sort((a, b) => {
           const ia = ordenarPorOrdem.indexOf(a.rotulo), ib = ordenarPorOrdem.indexOf(b.rotulo);
@@ -2278,6 +2275,23 @@
         itens.sort((a, b) => b.valor - a.valor || a.rotulo.localeCompare(b.rotulo, 'pt-BR'));
       }
       return itens;
+    }
+    function distribuicaoSimples(regs, idx, ordenarPorOrdem) {
+      const mapa = {};
+      regs.forEach(r => { const v = r[idx] || 'Não informado'; mapa[v] = (mapa[v] || 0) + 1; });
+      return ordenarDistribuicao(Object.keys(mapa).map(rotulo => ({ rotulo, valor: mapa[rotulo] })), ordenarPorOrdem);
+    }
+    function normalizarSexoCROCliente(valor) {
+      const t = normTxt(valor);
+      if (t === 'F' || t.indexOf('FEM') === 0) return 'Feminino';
+      if (t === 'M' || t.indexOf('MASC') === 0) return 'Masculino';
+      return 'Não informado';
+    }
+    function distribuicaoSexoCRO(regs) {
+      const ordem = ['Feminino', 'Masculino', 'Não informado'];
+      const mapa = { Feminino: 0, Masculino: 0, 'Não informado': 0 };
+      regs.forEach(r => { const sexo = normalizarSexoCROCliente(r[RC.sexo]); mapa[sexo] = (mapa[sexo] || 0) + 1; });
+      return ordenarDistribuicao(ordem.map(rotulo => ({ rotulo, valor: mapa[rotulo] })).filter(it => it.valor > 0), ordem);
     }
 
     function distribuicaoComorbidades(regs) {
@@ -2414,7 +2428,7 @@
         evolucao,
         mortalidadeInstitucional: mortalidadeInstitucionalFiltrada(),
         porUnidade: distribuicaoSimples(regs, RC.unidade),
-        porSexo: distribuicaoSimples(regs, RC.sexo, ['Feminino', 'Masculino', 'Não informado']),
+        porSexo: distribuicaoSexoCRO(regs),
         porFaixa: distribuicaoSimples(regs, RC.faixa, FAIXA_ETARIA_ORDEM),
         porMacro: distribuicaoSimples(regs, RC.macro),
         porOrigem: distribuicaoSimples(regs, RC.origem),
