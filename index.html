@@ -1756,6 +1756,56 @@
       return { grupos, mensagemVazia: null };
     }
 
+    // Plano de ação da CRO. DIFERENTE da CRP: a aba PONTOS SISTÊMICOS agrupa
+    // as ações em blocos bimestrais próprios da CRO (ABR-MAI, JUN-JUL, …,
+    // DEZ-JAN, FEV-MAR) que NÃO coincidem com o bimestre de calendário usado
+    // na CRP. Por isso NÃO reaproveitamos getMesBimestre/dadosPlanoAcao: aqui
+    // o agrupamento é pelo próprio bloco da planilha (cada ação já vem com os
+    // dois meses do bloco, cada um com seu ano) e o casamento com o recorte é
+    // por par (ano, mês) — nunca por mês sozinho, porque os meses se repetem
+    // a cada ano.
+    function dadosPlanoAcaoCRO(periodos, planoAcao, debug) {
+      if (!planoAcao || !planoAcao.length) {
+        const debugMsg = debug ? `<br><small style="color:#888;font-size:10px">debug: ${esc(debug)}</small>` : '';
+        return { grupos: [], mensagemVazia: `Plano de ação não disponível.${debugMsg}` };
+      }
+
+      // Recorte = pares "ano-mês" presentes no período do relatório.
+      const recorte = new Set();
+      (periodos || []).forEach(p => {
+        const numMes = MES_ORDEM[p.mes] || Number(p.mes);
+        if (numMes >= 1 && numMes <= 12) recorte.add(String(p.ano).trim() + '-' + numMes);
+      });
+
+      // Agrupa por bloco; um bloco entra se QUALQUER um dos seus meses (com o
+      // ano certo) estiver no recorte. Cada bloco aparece uma única vez.
+      const gruposMap = {};
+      planoAcao.forEach(acao => {
+        const meses = acao.meses || [];
+        const casa = meses.some(m => recorte.has(String(m.ano).trim() + '-' + Number(m.mes)));
+        if (!casa) return;
+        const chave = acao.blocoChave || acao.blocoRotulo || '';
+        if (!gruposMap[chave]) {
+          const ref = meses[0] || { ano: 0, mes: 0 };
+          gruposMap[chave] = { rotulo: acao.blocoRotulo || '', ordemAno: Number(ref.ano), ordemMes: Number(ref.mes), acoes: [] };
+        }
+        gruposMap[chave].acoes.push(acao);
+      });
+
+      const grupos = Object.keys(gruposMap)
+        .map(k => gruposMap[k])
+        .sort((a, b) => a.ordemAno - b.ordemAno || a.ordemMes - b.ordemMes)
+        .map(g => ({ rotulo: g.rotulo, acoes: g.acoes }));
+
+      if (!grupos.length) {
+        const recorteDbg = [...recorte].join(',') || '(vazio)';
+        const blocosDbg = [...new Set(planoAcao.map(a => a.blocoRotulo))].join(' · ');
+        const dbg = `recorte:[${recorteDbg}] · blocos na planilha:[${blocosDbg}]`;
+        return { grupos: [], mensagemVazia: `Nenhuma ação planejada nos períodos selecionados.<br><small style="color:#888;font-size:10px">debug: ${esc(dbg)}</small>` };
+      }
+      return { grupos, mensagemVazia: null };
+    }
+
     // Divide os grupos (bimestres) em blocos cujo total de linhas cabe no
     // orçamento informado, sem quebrar um bimestre no meio (o rowspan da
     // célula "Período" exige que todas as linhas do grupo fiquem juntas).
@@ -2787,7 +2837,7 @@
       // continuava sem cabeçalho/rodapé do documento. Por isso ela é dividida
       // em blocos que cabem numa folha, igual à tabela de períodos da CRP
       // (dividirGruposPlanoAcao/blocosPer).
-      const planoAcaoDados = dadosPlanoAcao(rel.evolucao, state.dados?.planoAcao || [], state.dados?.planoAcaoDebug || '');
+      const planoAcaoDados = dadosPlanoAcaoCRO(rel.evolucao, state.dados?.planoAcao || [], state.dados?.planoAcaoDebug || '');
       const totalLinhasAcoes = planoAcaoDados.grupos.reduce((s, g) => s + g.acoes.length, 0);
       const ROWS_INLINE_ACOES = 14;  // linhas que cabem junto do texto+conclusão
       const ROWS_CONT_ACOES = 24;    // linhas por folha dedicada de ações
