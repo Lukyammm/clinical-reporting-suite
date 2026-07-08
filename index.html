@@ -616,8 +616,14 @@
     /* ===== Impressão: só o documento, em A4 exato ===== */
     @media print {
       .doc-texto:empty { display: none !important; }
-      @page { size: A4 portrait; margin: 0; }
-      html, body { width: 210mm; background: #fff !important; }
+      /* Margem real da folha controlada aqui (não pelo diálogo do navegador):
+         com "Margens: Padrão" o Chrome usa exatamente estes 12mm, então a
+         impressão fica igual independente do que o usuário escolher. A folga
+         entre a altura da .pagina (ver abaixo) e a área útil (297−24=273mm)
+         garante que nenhuma folha "transborde" um fio para uma página em
+         branco seguinte, que era a causa do PDF desconfigurado. */
+      @page { size: A4 portrait; margin: 12mm; }
+      html, body { width: auto; background: #fff !important; }
       /* Navegadores descartam cores de fundo na impressão por padrão. Sem
          isto, as barras de distribuição por conformidade (mini-classif),
          selos %, barras de meta e legendas — que são fundos coloridos —
@@ -631,13 +637,15 @@
       .moldura { display: block; max-width: none; padding: 0; margin: 0; }
       .palco { display: block; }
       .pagina {
-        width: 210mm;
-        min-height: 297mm;
+        /* As margens da folha vêm do @page (12mm); a .pagina ocupa toda a
+           área útil, sem padding próprio (senão margem dobrada). A altura é
+           deliberadamente MENOR que a área útil de 273mm — repaginarDocumento()
+           usa o mesmo valor (PAGINA_MM) como orçamento, de modo que o conteúdo
+           nunca encoste na borda e nunca vaze para uma folha em branco. */
+        width: auto;
+        min-height: 260mm;
         margin: 0 !important;
-        /* Com @page{margin:0}, o padding-top da folha é a única folga até a
-           borda física — dá um respiro extra pra impressora/gerador de PDF
-           não cortar pixel do cabeçalho na borda superior. */
-        padding-top: 11mm;
+        padding: 0;
         border: 0;
         border-radius: 0;
         box-shadow: none;
@@ -2205,35 +2213,77 @@
       return `<section class="pagina">${cabecalhoDoc(tokens)}<div class="pagina-corpo">${corpo}</div>${rodapeDoc(num)}</section>`;
     }
 
+    // Altura-alvo de cada folha impressa, em mm. DEVE casar com o
+    // min-height da .pagina no @media print. É menor que a área útil real
+    // (297 − 2×12mm de margem = 273mm) de propósito: essa folga é o que impede
+    // que uma folha "encoste na borda" e transborde um fio para uma página em
+    // branco seguinte — a causa do PDF desconfigurado reportado.
+    const PAGINA_ALVO_MM = 260;
+
     // Repaginação automática: cada seção do relatório é montada assumindo que
-    // "geralmente" cabe numa folha A4, mas alguns blocos (sobretudo os textos
-    // editáveis livres — apresentação, epidemiologia, análise etc.) não têm
-    // tamanho previsível, porque o usuário pode escrever qualquer quantidade
-    // de texto. Quando um desses blocos cresce demais, o conteúdo ULTRAPASSA
-    // a folha e o navegador quebrava a impressão no meio da .pagina — gerando
-    // folha em branco, gráfico cortado ou tabela sem cabeçalho/rodapé (ver
-    // captura de tela do bug reportado).
+    // "geralmente" cabe numa folha A4, mas vários blocos não têm tamanho
+    // previsível — os textos editáveis livres (o usuário digita o quanto
+    // quiser) e, sobretudo, os blocos de gráficos da CRO, montados como uma
+    // ÚNICA seção .doc-graficos com dois gráficos de largura total empilhados,
+    // que juntos passam de uma folha. Nesses casos o navegador empurrava a
+    // seção inteira para a próxima folha (break-inside: avoid) ou a cortava,
+    // gerando as folhas em branco e os gráficos cortados das capturas de tela.
     //
     // Esta função mede (em px, já com a fonte real carregada) a altura de cada
-    // folha já renderizada e, sempre que uma ultrapassa o espaço disponível
-    // (297mm menos as margens e a altura real do cabeçalho/rodapé daquela
-    // folha), move os blocos que sobraram para uma nova folha própria — com
-    // cabeçalho e rodapé idênticos aos das demais e numeração recalculada no
-    // final. É chamada após o texto editável ser preenchido (ligarTextosEditaveis)
-    // e de novo, por segurança, imediatamente antes de imprimir/gerar o PDF.
+    // folha e faz duas coisas, nesta ordem, por folha:
+    //   1) Divide qualquer grupo de gráficos (.doc-graficos) que sozinho passe
+    //      do orçamento em várias seções .doc-graficos menores — cada gráfico
+    //      vira uma unidade que pode ir para outra folha.
+    //   2) Move os blocos que ainda sobram para uma nova folha própria, com
+    //      cabeçalho e rodapé idênticos aos das demais.
+    // No fim renumera todas as folhas. É chamada após o texto editável ser
+    // preenchido e de novo, por segurança, antes de imprimir/gerar o PDF.
     function repaginarDocumento() {
       const doc = $('documento');
       if (!doc) return;
-      const MM = 96 / 25.4;             // 1mm em px CSS (fixo, independe do DPI da tela)
-      const PAGE_H = 297 * MM;          // altura útil de uma folha A4
-      const PAD_TOP = 11 * MM;          // ver .pagina{padding} no @media print
-      const PAD_BOTTOM = 11 * MM;
-      const GAP_VERTICAL = 11;          // .pagina{gap:11px} entre cabeçalho/corpo/rodapé
+      const MM = 96 / 25.4;               // 1mm em px CSS (fixo, independe do DPI da tela)
+      const PAGINA_H = PAGINA_ALVO_MM * MM; // altura-alvo da folha (== min-height no print)
+      const GAP_CORPO = 11;               // gap entre filhos do .pagina-corpo (grid gap: 11px)
+      const GAP_PAGINA = 11;              // .pagina{gap:11px} entre cabeçalho/corpo/rodapé
+      const GAP_GRAF = 10;                // .doc-graficos{gap:10px} entre gráficos
+
+      const alturaDe = el => el.getBoundingClientRect().height;
+
+      // Divide um grupo .doc-graficos em vários (cada um com um subconjunto dos
+      // gráficos) de modo que cada grupo caiba no orçamento. Move os nós (não
+      // clona) para preservar os campos editáveis e seus listeners.
+      function dividirGraficos(sec, orcamento) {
+        const caixas = Array.from(sec.children);
+        if (caixas.length <= 1) return [sec];
+        const grupos = [];
+        let atual = [], h = 0;
+        caixas.forEach(cx => {
+          const ch = alturaDe(cx);
+          const gap = atual.length ? GAP_GRAF : 0;
+          if (atual.length && h + gap + ch > orcamento) { grupos.push(atual); atual = []; h = 0; }
+          atual.push(cx);
+          h += (atual.length > 1 ? GAP_GRAF : 0) + ch;
+        });
+        if (atual.length) grupos.push(atual);
+        if (grupos.length <= 1) return [sec];
+        return grupos.map(g => {
+          const ns = sec.cloneNode(false); // <section class="doc-graficos"> sem filhos
+          g.forEach(cx => ns.appendChild(cx));
+          return ns;
+        });
+      }
+
+      const orcamentoDe = pagina => {
+        const header = pagina.querySelector('.doc-cab');
+        const footer = pagina.querySelector('.doc-rodape');
+        const headerH = header ? alturaDe(header) : 0;
+        const footerH = footer ? alturaDe(footer) : 0;
+        return PAGINA_H - headerH - footerH - (GAP_PAGINA * 2);
+      };
 
       let paginas = Array.from(doc.children).filter(el => el.classList.contains('pagina'));
-      let i = 0;
-      let iteracoes = 0;
-      const LIMITE_ITERACOES = 2000;
+      let i = 0, iteracoes = 0;
+      const LIMITE_ITERACOES = 4000;
 
       while (i < paginas.length && iteracoes < LIMITE_ITERACOES) {
         iteracoes++;
@@ -2243,20 +2293,30 @@
         const corpo = pagina.querySelector('.pagina-corpo');
         if (!corpo || !corpo.children.length) { i++; continue; }
 
-        const headerH = header ? header.getBoundingClientRect().height : 0;
-        const footerH = footer ? footer.getBoundingClientRect().height : 0;
-        const orcamento = PAGE_H - PAD_TOP - PAD_BOTTOM - headerH - footerH - (GAP_VERTICAL * 2);
-        const corpoH = corpo.getBoundingClientRect().height;
+        const orcamento = orcamentoDe(pagina);
+
+        // Passo 1: normaliza grupos de gráficos altos demais para caberem.
+        Array.from(corpo.children).forEach(filho => {
+          if (filho.classList.contains('doc-graficos') && filho.children.length > 1 && alturaDe(filho) > orcamento) {
+            const partes = dividirGraficos(filho, orcamento);
+            if (partes.length > 1) {
+              partes.forEach(p => corpo.insertBefore(p, filho));
+              corpo.removeChild(filho);
+            }
+          }
+        });
+
+        const corpoH = alturaDe(corpo);
         if (corpoH <= orcamento + 1) { i++; continue; }
 
         const filhos = Array.from(corpo.children);
-        if (filhos.length <= 1) { i++; continue; } // bloco único gigante: sem como dividir sem quebrar o conteúdo
+        if (filhos.length <= 1) { i++; continue; } // bloco único indivisível: deixa fluir
 
-        let acumulado = 0;
-        let corte = filhos.length;
+        // Passo 2: encontra onde cortar e move o excedente para uma nova folha.
+        let acumulado = 0, corte = filhos.length;
         for (let k = 0; k < filhos.length; k++) {
-          const altura = filhos[k].getBoundingClientRect().height;
-          const gap = k > 0 ? GAP_VERTICAL : 0;
+          const altura = alturaDe(filhos[k]);
+          const gap = k > 0 ? GAP_CORPO : 0;
           if (acumulado + gap + altura > orcamento) { corte = k; break; }
           acumulado += gap + altura;
         }
@@ -3472,7 +3532,7 @@
         if (document.fonts && document.fonts.ready) { try { await document.fonts.ready; } catch (_) {} }
         repaginarDocumento();
         window.print();
-        toast('Na janela de impressão, escolha "Salvar como PDF" (margens: Nenhuma) para gerar o arquivo.', 'info', 'PDF');
+        toast('Na janela de impressão, escolha "Salvar como PDF" (margens: Padrão) para gerar o arquivo.', 'info', 'PDF');
       } catch (erro) {
         console.error(erro);
         toast(erro.message || 'Não foi possível abrir a janela de impressão.', 'erro', 'PDF');
