@@ -271,7 +271,12 @@
       width: 210mm;
       min-height: 297mm;
       margin: 0 auto;
-      padding: 9mm 15mm 11mm;
+      /* 12mm em todos os lados — igual à margem @page da impressão (ver
+         @media print) — para a largura útil do conteúdo (186mm) ser IDÊNTICA
+         na tela e no PDF. repaginarDocumento() mede a altura das seções na
+         tela antes de imprimir; se a largura do conteúdo fosse diferente, o
+         texto quebraria em linhas diferentes e a medição saía errada. */
+      padding: 12mm;
       background: var(--papel);
       border: 1px solid var(--linha);
       border-radius: 4px;
@@ -618,10 +623,15 @@
       .doc-texto:empty { display: none !important; }
       /* Margem real da folha controlada aqui (não pelo diálogo do navegador):
          com "Margens: Padrão" o Chrome usa exatamente estes 12mm, então a
-         impressão fica igual independente do que o usuário escolher. A folga
-         entre a altura da .pagina (ver abaixo) e a área útil (297−24=273mm)
-         garante que nenhuma folha "transborde" um fio para uma página em
-         branco seguinte, que era a causa do PDF desconfigurado. */
+         impressão fica igual independente do que o usuário escolher. Uma
+         pequena folga entre a altura da .pagina (ver abaixo) e a área útil
+         (297−24=273mm) garante que nenhuma folha "transborde" um fio para
+         uma página em branco seguinte — a causa original do PDF
+         desconfigurado. A folga é pequena de propósito: repaginarDocumento()
+         já mede a altura real de cada bloco e nunca deixa uma folha passar
+         do orçamento, então essa margem serve só de proteção contra
+         arredondamento — uma folga grande deixava o rodapé "flutuando" longe
+         da borda inferior real da folha em páginas com pouco conteúdo. */
       @page { size: A4 portrait; margin: 12mm; }
       html, body { width: auto; background: #fff !important; }
       /* Navegadores descartam cores de fundo na impressão por padrão. Sem
@@ -638,12 +648,14 @@
       .palco { display: block; }
       .pagina {
         /* As margens da folha vêm do @page (12mm); a .pagina ocupa toda a
-           área útil, sem padding próprio (senão margem dobrada). A altura é
-           deliberadamente MENOR que a área útil de 273mm — repaginarDocumento()
-           usa o mesmo valor (PAGINA_MM) como orçamento, de modo que o conteúdo
-           nunca encoste na borda e nunca vaze para uma folha em branco. */
+           área útil, sem padding próprio (senão margem dobrada — a largura
+           do conteúdo fica em 186mm, igual à da tela, ver .pagina fora do
+           @media print). A altura é levemente menor que a área útil de
+           273mm — repaginarDocumento() usa o mesmo valor (PAGINA_ALVO_MM)
+           como orçamento — só o suficiente para absorver arredondamento,
+           não para deixar o rodapé longe da borda inferior real da folha. */
         width: auto;
-        min-height: 260mm;
+        min-height: 268mm;
         margin: 0 !important;
         padding: 0;
         border: 0;
@@ -2214,11 +2226,13 @@
     }
 
     // Altura-alvo de cada folha impressa, em mm. DEVE casar com o
-    // min-height da .pagina no @media print. É menor que a área útil real
-    // (297 − 2×12mm de margem = 273mm) de propósito: essa folga é o que impede
-    // que uma folha "encoste na borda" e transborde um fio para uma página em
-    // branco seguinte — a causa do PDF desconfigurado reportado.
-    const PAGINA_ALVO_MM = 260;
+    // min-height da .pagina no @media print. É um pouco menor que a área
+    // útil real (297 − 2×12mm de margem = 273mm) só para absorver
+    // arredondamento entre a medição (feita com a página em tela, antes de
+    // imprimir) e o layout real da impressão — a folga é pequena de
+    // propósito: uma folga grande deixa o rodapé longe da borda inferior
+    // real da folha em páginas com pouco conteúdo ("rodapé muito em cima").
+    const PAGINA_ALVO_MM = 268;
 
     // Repaginação automática: cada seção do relatório é montada assumindo que
     // "geralmente" cabe numa folha A4, mas vários blocos não têm tamanho
