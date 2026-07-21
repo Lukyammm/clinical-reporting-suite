@@ -1450,7 +1450,6 @@
       const info = comissaoInfo();
       return `<header class="doc-cab">
         <div class="doc-cab-marca">
-          ${cfg.logoUrl ? `<img class="doc-logo" src="${esc(cfg.logoUrl)}" alt="" onerror="this.remove()">` : ''}
           <div style="min-width:0">
             <h2>Relatório Analítico da ${esc(info.sigla)}</h2>
             <p class="doc-cab-sub">${esc(info.nomeLongo)} · ${esc(tokens.periodo)}</p>
@@ -1465,7 +1464,6 @@
       const info = comissaoInfo();
       return `<footer class="doc-rodape">
         <span>${esc(info.sigla)} · ${esc(info.nomeLongo)}</span>
-        ${cfg.rodapeUrl ? `<img src="${esc(cfg.rodapeUrl)}" alt="" onerror="this.remove()">` : ''}
         <span>Página ${pagina}</span>
       </footer>`;
     }
